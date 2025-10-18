@@ -198,7 +198,7 @@ def download_font(font: FontConfig, dest_dir: Path, stats: DownloadStats) -> Non
 
 def main() -> None:
     """Download all configured fonts."""
-    fonts_dir = Path(__file__).parent.parent.parent / "assets" / "fonts"
+    fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
     fonts_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"📁 {fonts_dir}\n📦 {len(FONTS)} fonts\n")

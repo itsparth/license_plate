@@ -58,7 +58,7 @@ def generate_preview(font_path: Path, output_path: Path) -> None:
 
 def main() -> None:
     """Generate previews for all fonts."""
-    fonts_dir = Path(__file__).parent.parent.parent / "assets" / "fonts"
+    fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
     previews_dir = fonts_dir / "previews"
     previews_dir.mkdir(parents=True, exist_ok=True)
 
