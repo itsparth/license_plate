@@ -324,7 +324,7 @@ def generate_vehicle(
 
         if response.parts:
             for part in response.parts:
-                if part.inline_data:
+                if part.inline_data and part.inline_data.data:
                     from PIL import Image
                     from io import BytesIO
 
