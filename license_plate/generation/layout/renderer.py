@@ -10,7 +10,7 @@ from .base import BoundingBox, Box, Constraints, RenderContext, Widget
 def render_layout(
     widget: Widget, width: int, height: int
 ) -> Tuple[Image.Image, List[BoundingBox]]:
-    image = Image.new("RGB", (width, height), "white")
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     constraints = Constraints(
         min_width=width,
