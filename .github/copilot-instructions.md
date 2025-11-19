@@ -13,6 +13,8 @@ Three-phase pipeline for Indian license plate recognition:
 - **Minimalism**: Concise, readable code. No verbose docstrings or unnecessary abstractions
 - **Type Safety**: Use Pydantic models everywhere for configuration and data validation
 - **Python 3.13+**: Use modern syntax (`list[T]`, `dict[K, V]`, `Literal`, `@property`)
+- **Error-Free**: Ensure code is free of linting errors (Pylance/MyPy). Handle imports and types correctly. Use `# type: ignore` sparingly and only when necessary.
+- **Clean Output**: Do not use emojis in code output or comments. Keep logs professional and simple.
 
 ## Dependency Management with uv
 
