@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Literal, Union
+import random
 
 from pydantic import BaseModel
 from pydantic.functional_validators import BeforeValidator
@@ -73,3 +74,13 @@ def u(value: UnitLike) -> Unit:
 
 
 UnitField = Annotated[Unit, BeforeValidator(parse_unit)]
+
+
+def r(start: UnitLike, end: UnitLike) -> Unit:
+    s = parse_unit(start)
+    e = parse_unit(end)
+    if s.kind != e.kind:
+        raise ValueError(f"Range units must share kind (got {s.kind!r} vs {e.kind!r})")
+    low = min(s.value, e.value)
+    high = max(s.value, e.value)
+    return Unit(kind=s.kind, value=random.uniform(low, high))
