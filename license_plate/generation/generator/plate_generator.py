@@ -49,6 +49,10 @@ STATE_CODES = [
 PLATE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
 PLATE_DIGITS = "0123456789"
 
+# Separators between plate segments (state-district-letters-digits)
+SEPARATORS = ["", " ", "·", ".", "/", "-"]
+SEPARATOR_WEIGHTS = [20, 20, 5, 5, 5, 5]
+
 
 class IndianLicensePlate(BaseModel):
     state_code: str = Field(..., min_length=2, max_length=2)
@@ -57,6 +61,11 @@ class IndianLicensePlate(BaseModel):
     digits: str = Field(..., min_length=4, max_length=4)
     zero_pad_district: bool = True
     is_bharat_series: bool = False
+    separators: tuple[str, str, str] = (
+        "",
+        "",
+        "",
+    )  # between state-district, district-letters, letters-digits
 
     @property
     def district_formatted(self) -> str:
@@ -69,20 +78,22 @@ class IndianLicensePlate(BaseModel):
 
     @property
     def formatted(self) -> str:
+        s1, s2, s3 = self.separators
         if self.is_bharat_series:
             # Bharat series format: YYBH####XX (e.g., 24BH1234AB)
-            return (
-                f"{self.district_formatted}{self.state_code}{self.digits}{self.letters}"
-            )
-        return f"{self.state_code}{self.district_formatted}{self.letters}{self.digits}"
+            return f"{self.district_formatted}{s1}{self.state_code}{s2}{self.digits}{s3}{self.letters}"
+        return f"{self.state_code}{s1}{self.district_formatted}{s2}{self.letters}{s3}{self.digits}"
 
     @property
     def characters(self) -> list[str]:
         return list(self.formatted)
 
     @property
-    def character_types(self) -> list[Literal["letter", "digit"]]:
-        return ["letter" if c.isalpha() else "digit" for c in self.formatted]
+    def character_types(self) -> list[Literal["letter", "digit", "separator"]]:
+        return [
+            "letter" if c.isalpha() else "digit" if c.isdigit() else "separator"
+            for c in self.formatted
+        ]
 
 
 class PlateGenerator:
@@ -115,6 +126,10 @@ class PlateGenerator:
         return "".join(random.choices(PLATE_LETTERS, k=2))
 
     @staticmethod
+    def random_separators() -> tuple[str, str, str]:
+        return tuple(random.choices(SEPARATORS, weights=SEPARATOR_WEIGHTS, k=3))  # type: ignore
+
+    @staticmethod
     def generate(
         *,
         state_code: str | None = None,
@@ -123,6 +138,7 @@ class PlateGenerator:
         digits: str | None = None,
         zero_pad_district: bool | None = None,
         is_bharat_series: bool = False,
+        separators: tuple[str, str, str] | None = None,
     ) -> IndianLicensePlate:
         if is_bharat_series:
             state_code = "BH"
@@ -144,6 +160,8 @@ class PlateGenerator:
 
         if digits is None:
             digits = PlateGenerator.random_digits()
+        if separators is None:
+            separators = PlateGenerator.random_separators()
 
         return IndianLicensePlate(
             state_code=state_code,
@@ -152,6 +170,7 @@ class PlateGenerator:
             digits=digits,
             zero_pad_district=zero_pad_district,
             is_bharat_series=is_bharat_series,
+            separators=separators,
         )
 
 
@@ -161,4 +180,6 @@ __all__ = [
     "STATE_CODES",
     "PLATE_LETTERS",
     "PLATE_DIGITS",
+    "SEPARATORS",
+    "SEPARATOR_WEIGHTS",
 ]
