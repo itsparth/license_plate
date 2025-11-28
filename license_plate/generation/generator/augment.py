@@ -35,28 +35,31 @@ def create_augmentation_pipeline(*, output_size: int = 192) -> A.Compose:
                 ],
                 p=0.7,
             ),
-            # Noise effects (light noise only)
+            # Noise effects (realistic camera sensor noise)
             A.OneOf(
                 [
-                    A.ISONoise(color_shift=(0.01, 0.03), intensity=(0.05, 0.15), p=1.0),
-                    A.GaussNoise(std_range=(0.01, 0.04), p=1.0),
-                    A.MultiplicativeNoise(multiplier=(0.95, 1.05), p=1.0),
+                    A.ISONoise(color_shift=(0.01, 0.05), intensity=(0.1, 0.3), p=1.0),
+                    A.GaussNoise(std_range=(0.02, 0.08), p=1.0),
+                    A.MultiplicativeNoise(multiplier=(0.9, 1.1), p=1.0),
                 ],
-                p=0.25,
+                p=0.5,
             ),
-            # Blur effects (very subtle - plates should remain readable)
+            # Blur effects (realistic camera motion/focus blur)
             A.OneOf(
                 [
-                    A.GaussianBlur(blur_limit=(3, 3), p=1.0),
-                    A.MotionBlur(blur_limit=(3, 3), p=1.0),
+                    A.GaussianBlur(blur_limit=(3, 5), p=1.0),
+                    A.MotionBlur(blur_limit=(3, 9), p=1.0),
+                    A.Defocus(radius=(1, 3), p=1.0),
                 ],
-                p=0.15,
+                p=0.4,
             ),
+            # Additional motion blur (simulates camera/vehicle movement)
+            A.MotionBlur(blur_limit=(3, 7), p=0.25),
             # Compression artifacts (mild)
             A.ImageCompression(quality_range=(70, 95), p=0.2),
             # Tight crop around plate (simulates detector output)
-            # erosion_rate=0.05 allows up to 5% of edge chars to be cropped
-            A.BBoxSafeRandomCrop(erosion_rate=0.05, p=0.8),
+            # erosion_rate=0.01 allows very minimal edge cropping (rare)
+            A.BBoxSafeRandomCrop(erosion_rate=0.01, p=0.6),
             # Convert to grayscale (training target)
             A.ToGray(p=1.0),
             # Geometric transforms
@@ -68,7 +71,7 @@ def create_augmentation_pipeline(*, output_size: int = 192) -> A.Compose:
         bbox_params=A.BboxParams(
             format="coco",  # [x, y, width, height]
             label_fields=["labels"],
-            min_visibility=0.9,  # Keep chars that are at least 90% visible
+            min_visibility=0.6,  # Keep chars that are at least 60% visible
         ),
     )
 

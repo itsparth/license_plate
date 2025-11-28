@@ -59,39 +59,56 @@ def render_tight_and_scale(
     *,
     base_scale: float = 1.0,
     padding_ratio: float = 0.05,
+    min_render_scale: float = 2.0,
 ) -> Tuple[Image.Image, List[BoundingBox]]:
     """
-    Render widget at its natural size, then scale and center to fit target bounds.
+    Render widget larger than target, then scale DOWN to fit (never up).
 
-    1. Measure natural content size with unconstrained layout
-    2. Render at natural size
-    3. Scale down to fit target bounds (with padding)
-    4. Center on transparent target-sized image
-    5. Scale bounding boxes accordingly
+    1. Measure natural content size
+    2. Calculate render scale to ensure rendered size >= target
+    3. Render at larger size for crisp downscaling
+    4. Scale down to fit target bounds (with padding)
+    5. Center on transparent target-sized image
     """
-    # Measure natural size with base scale
     unconstrained = Constraints(
         min_width=0, max_width=10000, min_height=0, max_height=10000
     )
+
+    # First measure at base scale to get natural proportions
     measured = widget.layout(unconstrained, base_scale)
     natural_w = max(1, measured.width)
     natural_h = max(1, measured.height)
 
-    # Render at natural size
-    natural_img = Image.new("RGBA", (natural_w, natural_h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(natural_img)
-    render_ctx = RenderContext(image=natural_img, draw=draw, scale=base_scale)
-    boxes = widget.render(Box(x=0, y=0, width=natural_w, height=natural_h), render_ctx)
-
-    # Calculate scale to fit within target bounds (with padding)
+    # Calculate usable target area
     usable_w = target_width * (1 - 2 * padding_ratio)
     usable_h = target_height * (1 - 2 * padding_ratio)
-    fit_scale = min(usable_w / natural_w, usable_h / natural_h)
 
-    # Scale image
-    scaled_w = max(1, int(natural_w * fit_scale))
-    scaled_h = max(1, int(natural_h * fit_scale))
-    scaled_img = natural_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
+    # Calculate scale needed so rendered size >= target (for downscaling only)
+    # We want: natural_w * render_scale >= usable_w and natural_h * render_scale >= usable_h
+    scale_for_width = usable_w / natural_w if natural_w > 0 else 1.0
+    scale_for_height = usable_h / natural_h if natural_h > 0 else 1.0
+    # Use the larger scale to ensure both dimensions are covered
+    needed_scale = max(scale_for_width, scale_for_height)
+    # Ensure we render at least min_render_scale times larger for quality
+    render_scale = max(base_scale * needed_scale * min_render_scale, base_scale)
+
+    # Re-measure and render at the computed scale
+    measured = widget.layout(unconstrained, render_scale)
+    render_w = max(1, measured.width)
+    render_h = max(1, measured.height)
+
+    render_img = Image.new("RGBA", (render_w, render_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(render_img)
+    render_ctx = RenderContext(image=render_img, draw=draw, scale=render_scale)
+    boxes = widget.render(Box(x=0, y=0, width=render_w, height=render_h), render_ctx)
+
+    # Calculate scale to fit within target bounds (should be <= 1.0 now)
+    fit_scale = min(usable_w / render_w, usable_h / render_h)
+
+    # Scale image down
+    scaled_w = max(1, int(render_w * fit_scale))
+    scaled_h = max(1, int(render_h * fit_scale))
+    scaled_img = render_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
 
     # Center on target
     target_img = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 0))

@@ -142,8 +142,9 @@ def generate_sample(
 
     img_w, img_h = img.size
 
-    # Small margin to simulate detector crop (10-50% of plate height)
-    margin_ratio = random.uniform(0.1, 0.5)
+    # Margin around plate - sometimes tight, sometimes with more vehicle context
+    # 10-100% of plate height (larger margins show more vehicle)
+    margin_ratio = random.uniform(0.1, 1.0)
     crop_margin = int(plate_h * margin_ratio)
     crop_left = max(0, left - crop_margin)
     crop_top = max(0, top - crop_margin)
@@ -162,7 +163,7 @@ def generate_sample(
         target_width=plate_w,
         target_height=plate_h,
         base_scale=1.0,
-        padding_ratio=0.02,
+        padding_ratio=0.05,  # 5% padding on each side
     )
 
     result = cropped.convert("RGBA")
