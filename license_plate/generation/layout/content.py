@@ -76,7 +76,7 @@ class Text(Widget):
             char_width = char_bbox[2] - char_bbox[0]
             char_height = char_bbox[3] - char_bbox[1]
             char_offset_x = -char_bbox[0]
-            char_offset_y = -char_bbox[1]
+            # char_offset_y = -char_bbox[1]
 
             # Draw character
             draw_x = cursor_x + char_offset_x
@@ -89,8 +89,8 @@ class Text(Widget):
                     label=ch,
                     x=int(cursor_x),
                     y=int(box.y + offset_y + char_bbox[1]),
-                    width=char_width,
-                    height=char_height,
+                    width=int(char_width),
+                    height=int(char_height),
                 )
             )
 
