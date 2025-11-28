@@ -8,6 +8,7 @@ from .units import UnitField, px
 
 MainAxisAlignment = Literal["start", "center", "end", "space_between"]
 CrossAxisAlignment = Literal["start", "center", "end"]
+AxisSize = Literal["min", "max"]
 
 
 class Padding(Widget):
@@ -81,6 +82,7 @@ class Row(Widget):
     gap: UnitField = px(0)
     main_axis_alignment: MainAxisAlignment = "start"
     cross_axis_alignment: CrossAxisAlignment = "center"
+    cross_axis_size: AxisSize = "min"
 
     def layout(
         self, constraints: Constraints, root_width: int, root_height: int
@@ -107,7 +109,10 @@ class Row(Widget):
                 x += gap_px
             max_height = max(max_height, child_box.height)
         width = min(constraints.max_width, x)
-        height = min(constraints.max_height, max_height)
+        if self.cross_axis_size == "max":
+            height = constraints.max_height
+        else:
+            height = min(constraints.max_height, max_height)
         return Box(x=0, y=0, width=width, height=height)
 
     def render(self, box: Box, ctx: RenderContext) -> List[BoundingBox]:
@@ -147,15 +152,18 @@ class Row(Widget):
             if len(self.children) > 1:
                 gap_px = gap_px + free_space // (len(self.children) - 1)
 
+        # Use content height for alignment when cross_axis_size is "min"
+        align_height = box.height if self.cross_axis_size == "max" else max_child_height
+
         cursor_x = start_x
         all_boxes: List[BoundingBox] = []
         for index, (child, measured) in enumerate(zip(self.children, child_boxes)):
             if self.cross_axis_alignment == "start":
                 child_y = box.y
             elif self.cross_axis_alignment == "center":
-                child_y = box.y + (box.height - measured.height) // 2
+                child_y = box.y + (align_height - measured.height) // 2
             else:  # end
-                child_y = box.y + (box.height - measured.height)
+                child_y = box.y + (align_height - measured.height)
             placed = Box(
                 x=cursor_x, y=child_y, width=measured.width, height=measured.height
             )
@@ -171,6 +179,7 @@ class Column(Widget):
     gap: UnitField = px(0)
     main_axis_alignment: MainAxisAlignment = "start"
     cross_axis_alignment: CrossAxisAlignment = "center"
+    cross_axis_size: AxisSize = "min"
 
     def layout(
         self, constraints: Constraints, root_width: int, root_height: int
@@ -196,7 +205,10 @@ class Column(Widget):
             if index < len(self.children) - 1:
                 y += gap_px
             max_width = max(max_width, child_box.width)
-        width = min(constraints.max_width, max_width)
+        if self.cross_axis_size == "max":
+            width = constraints.max_width
+        else:
+            width = min(constraints.max_width, max_width)
         height = min(constraints.max_height, y)
         return Box(x=0, y=0, width=width, height=height)
 
@@ -237,15 +249,18 @@ class Column(Widget):
             if len(self.children) > 1:
                 gap_px = gap_px + free_space // (len(self.children) - 1)
 
+        # Use content width for alignment when cross_axis_size is "min"
+        align_width = box.width if self.cross_axis_size == "max" else max_child_width
+
         cursor_y = start_y
         all_boxes: List[BoundingBox] = []
         for index, (child, measured) in enumerate(zip(self.children, child_boxes)):
             if self.cross_axis_alignment == "start":
                 child_x = box.x
             elif self.cross_axis_alignment == "center":
-                child_x = box.x + (box.width - measured.width) // 2
+                child_x = box.x + (align_width - measured.width) // 2
             else:  # end
-                child_x = box.x + (box.width - measured.width)
+                child_x = box.x + (align_width - measured.width)
             placed = Box(
                 x=child_x, y=cursor_y, width=measured.width, height=measured.height
             )
@@ -299,7 +314,7 @@ class Align(Widget):
 class Container(Widget):
     width: Optional[UnitField] = None
     height: Optional[UnitField] = None
-    color: str = "white"
+    color: str = "#00000000"  # Transparent by default
     child: Optional[Widget] = None
 
     def layout(

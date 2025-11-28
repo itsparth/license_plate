@@ -35,8 +35,8 @@ def generate_preview(font_path: Path, output_path: Path) -> None:
     # 10 chars per row (A-J, K-T, U-Z0-9, 0-9 on separate rows)
     rows = [CHARACTERS[:10], CHARACTERS[10:20], CHARACTERS[20:30], CHARACTERS[30:]]
 
-    img_width = 10 * (max_char_width + CHAR_SPACING) + 2 * PADDING
-    img_height = len(rows) * (char_height + CHAR_SPACING) + 2 * PADDING
+    img_width = int(10 * (max_char_width + CHAR_SPACING) + 2 * PADDING)
+    img_height = int(len(rows) * (char_height + CHAR_SPACING) + 2 * PADDING)
 
     # Create image
     img = Image.new("RGB", (img_width, img_height), BG_COLOR)

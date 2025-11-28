@@ -4,7 +4,7 @@ from typing import List, Optional
 from PIL import Image, ImageDraw, ImageFont
 
 from .base import BoundingBox, Box, Constraints, RenderContext, Widget
-from .units import UnitField
+from .units import UnitField, px
 
 
 class Text(Widget):
@@ -12,6 +12,7 @@ class Text(Widget):
     font_path: str
     font_size: UnitField
     color: str = "black"
+    letter_spacing: UnitField = px(0)  # Extra spacing between characters
 
     def _font(self, root_width: int, root_height: int) -> ImageFont.FreeTypeFont:
         size_px = int(
@@ -21,58 +22,82 @@ class Text(Widget):
         )
         return ImageFont.truetype(self.font_path, size_px)
 
+    def _get_letter_spacing(self, root_width: int, root_height: int) -> int:
+        return int(
+            self.letter_spacing.resolve(
+                parent=root_height, root_width=root_width, root_height=root_height
+            )
+        )
+
     def layout(
         self, constraints: Constraints, root_width: int, root_height: int
     ) -> Box:
         font = self._font(root_width, root_height)
-        ascent, descent = font.getmetrics()
+        spacing = self._get_letter_spacing(root_width, root_height)
         dummy_img = Image.new("RGB", (1, 1))
         draw = ImageDraw.Draw(dummy_img)
-        bbox = draw.textbbox((0, 0), self.content, font=font)
 
-        text_width = bbox[2] - bbox[0]
-        # Use tight glyph bounding box height (no extra padding)
-        text_height = bbox[3] - bbox[1]
+        # Calculate total width with letter spacing
+        total_width = 0
+        max_height = 0
+        for i, ch in enumerate(self.content):
+            bbox = draw.textbbox((0, 0), ch, font=font)
+            char_width = bbox[2] - bbox[0]
+            char_height = bbox[3] - bbox[1]
+            total_width += char_width
+            if i < len(self.content) - 1:
+                total_width += spacing
+            max_height = max(max_height, char_height)
 
-        width = int(min(constraints.max_width, text_width))
-        height = int(min(constraints.max_height, text_height))
+        width = int(min(constraints.max_width, total_width))
+        height = int(min(constraints.max_height, max_height))
         return Box(x=0, y=0, width=width, height=height)
 
     def render(self, box: Box, ctx: RenderContext) -> List[BoundingBox]:
         font = self._font(ctx.root_width, ctx.root_height)
+        spacing = self._get_letter_spacing(ctx.root_width, ctx.root_height)
 
         dummy_img = Image.new("RGB", (1, 1))
         draw = ImageDraw.Draw(dummy_img)
-        full_bbox = draw.textbbox((0, 0), self.content, font=font)
-        offset_x = -full_bbox[0]
-        offset_y = -full_bbox[1]
 
-        # Draw text shifted so glyph region top-left is at box origin
-        draw_x = box.x + offset_x
-        draw_y = box.y + offset_y
-        ctx.draw.text((draw_x, draw_y), self.content, font=font, fill=self.color)
+        # Find baseline offset from first character
+        if self.content:
+            first_bbox = draw.textbbox((0, 0), self.content[0], font=font)
+            offset_y = -first_bbox[1]
+        else:
+            offset_y = 0
 
         boxes: List[BoundingBox] = []
-        cursor_x = 0
+        cursor_x = box.x
 
-        for ch in self.content:
-            # Measure character at current advance position to capture tight vertical bounds
-            left, top, right, bottom = draw.textbbox((cursor_x, 0), ch, font=font)
-            width = int(right - left)
-            height = int(bottom - top)
-            # Global coordinates incorporate drawing offset and per-char local bbox
-            global_x = draw_x + left
-            global_y = draw_y + top
+        for i, ch in enumerate(self.content):
+            # Get character bounds
+            char_bbox = draw.textbbox((0, 0), ch, font=font)
+            char_width = char_bbox[2] - char_bbox[0]
+            char_height = char_bbox[3] - char_bbox[1]
+            char_offset_x = -char_bbox[0]
+            char_offset_y = -char_bbox[1]
+
+            # Draw character
+            draw_x = cursor_x + char_offset_x
+            draw_y = box.y + offset_y
+            ctx.draw.text((draw_x, draw_y), ch, font=font, fill=self.color)
+
+            # Record bounding box
             boxes.append(
                 BoundingBox(
                     label=ch,
-                    x=int(global_x),
-                    y=int(global_y),
-                    width=width,
-                    height=height,
+                    x=int(cursor_x),
+                    y=int(box.y + offset_y + char_bbox[1]),
+                    width=char_width,
+                    height=char_height,
                 )
             )
-            cursor_x += width
+
+            # Advance cursor
+            cursor_x += char_width
+            if i < len(self.content) - 1:
+                cursor_x += spacing
 
         return boxes
 
