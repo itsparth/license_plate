@@ -11,7 +11,7 @@ from license_plate.generation.generator import (
     TemplateStyle,
 )
 from license_plate.generation.generator.asset_loader import AssetLoader
-from license_plate.generation.layout import render_bounding_boxes, render_layout, u
+from license_plate.generation.layout import render_bounding_boxes, render_tight
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output" / "template_previews"
 
@@ -22,15 +22,11 @@ def render_template_preview(
     style: TemplateStyle,
     *,
     show_boxes: bool = True,
-    height: int = 300,
+    scale: float = 1.0,
 ) -> Image.Image:
-    """Render a single template with optional bounding boxes."""
-    # Use midpoint of aspect ratio range for optimal fit
-    aspect_ratio = (template.min_aspect_ratio + template.max_aspect_ratio) / 2
-    width = int(height * aspect_ratio)
-
+    """Render a single template cropped to actual content size."""
     widget = template(plate, style)
-    img, boxes = render_layout(widget, width, height)
+    img, boxes = render_tight(widget, scale=scale)
 
     # Add white background
     bg = Image.new("RGB", img.size, "white")
@@ -67,15 +63,15 @@ def generate_all_previews(
 
     style = TemplateStyle(
         font_path=font_path,
-        font_size=u("30vh"),
-        font_size_small=u("20vh"),
-        font_size_large=u("40vh"),
-        font_size_xlarge=u("50vh"),
-        padding_h=u("3vw"),
-        padding_v=u("5vh"),
-        gap=u("4vh"),
-        row_gap=u("3vh"),
-        letter_spacing=u("1vh"),  # 2x the default (0.5vh)
+        font_size=50,
+        font_size_small=35,
+        font_size_large=60,
+        font_size_xlarge=70,
+        padding_h=10,
+        padding_v=15,
+        gap=8,
+        row_gap=6,
+        letter_spacing=2,
     )
 
     print(f"Plate: {plate.formatted}")
@@ -112,13 +108,19 @@ def generate_all_previews(
     create_grid_preview(OUTPUT_DIR)
 
 
-def create_grid_preview(output_dir: Path):
-    """Create a grid of all template previews."""
+def create_grid_preview(output_dir: Path, target_height: int = 80):
+    """Create a grid of all template previews, normalized to same height."""
     images = []
     for template in ALL_TEMPLATES:
         img_path = output_dir / f"{template.name}.png"
         if img_path.exists():
-            images.append(Image.open(img_path))
+            with Image.open(img_path) as img:
+                # Scale to target height maintaining aspect ratio
+                scale = target_height / img.height
+                new_w = int(img.width * scale)
+                images.append(
+                    img.resize((new_w, target_height), Image.Resampling.LANCZOS)
+                )
 
     if not images:
         return
@@ -127,21 +129,20 @@ def create_grid_preview(output_dir: Path):
     cols = 3
     rows = (len(images) + cols - 1) // cols
 
-    # Get max dimensions
+    # Get max width after normalization
     max_w = max(img.width for img in images)
-    max_h = max(img.height for img in images)
 
     # Create grid
     padding = 10
     grid_w = cols * max_w + (cols + 1) * padding
-    grid_h = rows * max_h + (rows + 1) * padding
+    grid_h = rows * target_height + (rows + 1) * padding
     grid = Image.new("RGB", (grid_w, grid_h), "#ffffff")
 
     for idx, img in enumerate(images):
         row = idx // cols
         col = idx % cols
         x = padding + col * (max_w + padding)
-        y = padding + row * (max_h + padding)
+        y = padding + row * (target_height + padding)
         grid.paste(img, (x, y))
 
     grid.save(output_dir / "_all_templates.png")

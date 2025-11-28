@@ -34,15 +34,12 @@ class RenderContext(BaseModel):
 
     image: Image.Image
     draw: ImageDraw.ImageDraw
-    root_width: int
-    root_height: int
+    scale: float = 1.0  # Scale factor for all measurements
 
 
 class Widget(BaseModel, ABC):
     @abstractmethod
-    def layout(
-        self, constraints: Constraints, root_width: int, root_height: int
-    ) -> Box:
+    def layout(self, constraints: Constraints, scale: float) -> Box:
         raise NotImplementedError
 
     @abstractmethod

@@ -6,6 +6,8 @@ from .asset_loader import (
     VehicleImageAsset,
     VehiclePlateBBox,
 )
+from .augment import create_augmentation_pipeline
+from .color import get_contrasting_color_with_alpha, sample_plate_color
 from .plate_generator import (
     IndianLicensePlate,
     PlateGenerator,
@@ -48,6 +50,11 @@ __all__ = [
     "STATE_CODES",
     "VehicleImageAsset",
     "VehiclePlateBBox",
+    # Augmentation
+    "create_augmentation_pipeline",
+    # Color
+    "get_contrasting_color_with_alpha",
+    "sample_plate_color",
     # Templates
     "Template",
     "TemplateStyle",

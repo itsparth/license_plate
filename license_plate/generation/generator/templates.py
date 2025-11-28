@@ -5,8 +5,7 @@ from typing import Callable, Literal, TypeAlias
 
 from pydantic import BaseModel
 
-from ..layout import Column, Container, Padding, Row, Text, Widget, u
-from ..layout.units import UnitField
+from ..layout import Column, Container, Padding, Row, Text, Widget
 from .plate_generator import IndianLicensePlate
 
 CrossAlign = Literal["start", "center", "end"]
@@ -29,18 +28,18 @@ class Template(BaseModel):
 
 class TemplateStyle(BaseModel):
     font_path: str
-    font_size: UnitField = u("8vh")
-    font_size_small: UnitField = u("6vh")
-    font_size_large: UnitField = u("10vh")
-    font_size_xlarge: UnitField = u("12vh")
+    font_size: int = 50
+    font_size_small: int = 35
+    font_size_large: int = 60
+    font_size_xlarge: int = 70
     color: str = "black"
-    padding_h: UnitField = u("2vw")
-    padding_v: UnitField = u("2vh")
-    gap: UnitField = u("1vw")
-    row_gap: UnitField = u("1vh")
-    letter_spacing: UnitField = u("0.5vh")  # Default letter spacing
+    padding_h: int = 10
+    padding_v: int = 10
+    gap: int = 5
+    row_gap: int = 5
+    letter_spacing: int = 2
 
-    def text(self, content: str, size: UnitField | None = None) -> Text:
+    def text(self, content: str, size: int | None = None) -> Text:
         return Text(
             content=content,
             font_path=self.font_path,
@@ -168,8 +167,8 @@ def _state_district_stacked(plate: IndianLicensePlate, style: TemplateStyle) -> 
 TEMPLATE_STATE_DISTRICT_STACKED = Template(
     name="state_district_stacked",
     func=_state_district_stacked,
-    min_aspect_ratio=3.5,
-    max_aspect_ratio=6.0,
+    min_aspect_ratio=4.0,
+    max_aspect_ratio=7.0,
 )
 
 
@@ -202,8 +201,8 @@ def _state_district_letters_stacked(
 TEMPLATE_STATE_DISTRICT_LETTERS_STACKED = Template(
     name="state_district_letters_stacked",
     func=_state_district_letters_stacked,
-    min_aspect_ratio=3.0,
-    max_aspect_ratio=5.0,
+    min_aspect_ratio=3.5,
+    max_aspect_ratio=6.0,
 )
 
 
@@ -229,8 +228,8 @@ def _digits_second_line(plate: IndianLicensePlate, style: TemplateStyle) -> Widg
 TEMPLATE_DIGITS_SECOND_LINE = Template(
     name="digits_second_line",
     func=_digits_second_line,
-    min_aspect_ratio=1.8,
-    max_aspect_ratio=3.5,
+    min_aspect_ratio=1.0,
+    max_aspect_ratio=4.0,
     is_multi_line=True,
 )
 
@@ -254,7 +253,7 @@ def _letters_digits_second_line(
 TEMPLATE_LETTERS_DIGITS_SECOND_LINE = Template(
     name="letters_digits_second_line",
     func=_letters_digits_second_line,
-    min_aspect_ratio=2.0,
+    min_aspect_ratio=1.0,
     max_aspect_ratio=4.0,
     is_multi_line=True,
 )
@@ -278,7 +277,7 @@ def _equal_lines(plate: IndianLicensePlate, style: TemplateStyle) -> Widget:
 TEMPLATE_EQUAL_LINES = Template(
     name="equal_lines",
     func=_equal_lines,
-    min_aspect_ratio=2.0,
+    min_aspect_ratio=1.0,
     max_aspect_ratio=4.0,
     is_multi_line=True,
 )
@@ -303,8 +302,8 @@ def _triple_lines(plate: IndianLicensePlate, style: TemplateStyle) -> Widget:
 TEMPLATE_TRIPLE_LINES = Template(
     name="triple_lines",
     func=_triple_lines,
-    min_aspect_ratio=1.2,
-    max_aspect_ratio=2.5,
+    min_aspect_ratio=0.5,
+    max_aspect_ratio=2.0,
     is_multi_line=True,
 )
 
@@ -327,8 +326,8 @@ def _compact_two_line(plate: IndianLicensePlate, style: TemplateStyle) -> Widget
 TEMPLATE_COMPACT_TWO_LINE = Template(
     name="compact_two_line",
     func=_compact_two_line,
-    min_aspect_ratio=2.5,
-    max_aspect_ratio=5.0,
+    min_aspect_ratio=1.0,
+    max_aspect_ratio=4.0,
     is_multi_line=True,
 )
 
@@ -352,7 +351,7 @@ def _large_letters_center(plate: IndianLicensePlate, style: TemplateStyle) -> Wi
 TEMPLATE_LARGE_LETTERS_CENTER = Template(
     name="large_letters_center",
     func=_large_letters_center,
-    min_aspect_ratio=1.0,
+    min_aspect_ratio=0.5,
     max_aspect_ratio=2.0,
     is_multi_line=True,
 )
@@ -394,7 +393,7 @@ def _bharat_two_line(plate: IndianLicensePlate, style: TemplateStyle) -> Widget:
 TEMPLATE_BHARAT_TWO_LINE = Template(
     name="bharat_two_line",
     func=_bharat_two_line,
-    min_aspect_ratio=2.0,
+    min_aspect_ratio=1.0,
     max_aspect_ratio=4.0,
     is_multi_line=True,
     is_bharat_only=True,

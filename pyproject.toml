@@ -5,6 +5,7 @@ description = "Synthetic license plate data generation, plate & character detect
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "albumentations>=2.0.8",
     "google-genai>=1.45.0",
     "httpx>=0.28.1",
     "numpy>=2.2.6",
