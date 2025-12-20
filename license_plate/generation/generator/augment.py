@@ -66,7 +66,12 @@ def create_augmentation_pipeline(*, output_size: int = 192) -> A.Compose:
             A.OneOf(
                 [
                     A.GaussianBlur(blur_limit=(3, 5), p=1.0),
-                    A.MotionBlur(blur_limit=(3, 9), p=1.0),
+                    A.MotionBlur(
+                        blur_limit=(5, 15),
+                        angle_range=(0, 360),
+                        direction_range=(-1.0, 1.0),
+                        p=1.0,
+                    ),
                     A.Defocus(radius=(1, 3), p=1.0),
                 ],
                 p=0.4,
