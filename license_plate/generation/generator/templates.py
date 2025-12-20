@@ -238,7 +238,7 @@ TEMPLATE_TRIPLE_LINES = Template(
     name="triple_lines",
     func=_triple_lines,
     min_aspect_ratio=0.5,
-    max_aspect_ratio=2.0,
+    max_aspect_ratio=1.5,
     is_multi_line=True,
 )
 
@@ -287,7 +287,7 @@ TEMPLATE_LARGE_LETTERS_CENTER = Template(
     name="large_letters_center",
     func=_large_letters_center,
     min_aspect_ratio=0.5,
-    max_aspect_ratio=2.0,
+    max_aspect_ratio=1.5,
     is_multi_line=True,
 )
 
