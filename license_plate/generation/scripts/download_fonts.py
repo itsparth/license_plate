@@ -87,6 +87,12 @@ FONTS: list[FontConfig] = [
         category="hsrp",
         zip_path="fonts/ttf/GL-Nummernschild-Mtl.ttf",
     ),
+    FontConfig(
+        name="license_plate",
+        url="https://get.fontspace.co/download/family/8jp4/da52c1447b9d43ab882b306fea0b04d8/license-plate-font.zip",
+        category="hsrp",
+        zip_path="LicensePlate-j9eO.ttf",
+    ),
     # Display: bold, fancy (3 fonts)
     FontConfig(
         name="anton",
