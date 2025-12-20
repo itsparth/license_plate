@@ -124,16 +124,22 @@ class AssetLoader(BaseModel):
                 items.append(asset)
         return items
 
-    def logos(self, *, min_aspect: Optional[float] = None) -> list[LogoAsset]:
+    def logos(
+        self, *, min_aspect: Optional[float] = None, max_aspect: Optional[float] = None
+    ) -> list[LogoAsset]:
         if self._logo_cache is None:
             self._logo_cache = self._load_logos()
         items = list(self._logo_cache)
         if min_aspect is not None:
-            items = [logo for logo in items if logo.is_long(min_aspect=min_aspect)]
+            items = [logo for logo in items if logo.aspect_ratio >= min_aspect]
+        if max_aspect is not None:
+            items = [logo for logo in items if logo.aspect_ratio <= max_aspect]
         return items
 
-    def random_logo(self, *, min_aspect: Optional[float] = None) -> Optional[LogoAsset]:
-        candidates = self.logos(min_aspect=min_aspect)
+    def random_logo(
+        self, *, min_aspect: Optional[float] = None, max_aspect: Optional[float] = None
+    ) -> Optional[LogoAsset]:
+        candidates = self.logos(min_aspect=min_aspect, max_aspect=max_aspect)
         return random.choice(candidates) if candidates else None
 
     # Vehicles ---------------------------------------------------------------

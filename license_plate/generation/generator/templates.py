@@ -1,84 +1,19 @@
 from __future__ import annotations
 
 import random
-from typing import Callable, Literal, TypeAlias
 
-from pydantic import BaseModel
-
-from ..layout import Column, Container, Padding, Row, Text, Widget
+from ..layout import Column, Container, Padding, Row, Widget
+from .asset_loader import LogoAsset
 from .plate_generator import IndianLicensePlate
-
-CrossAlign = Literal["start", "center", "end"]
-TemplateFunc: TypeAlias = Callable[[IndianLicensePlate, "TemplateStyle"], Widget]
-
-
-class Template(BaseModel):
-    """Template descriptor with render function and aspect ratio bounds"""
-
-    name: str
-    func: TemplateFunc  # type: ignore[valid-type]
-    min_aspect_ratio: float  # width / height (minimum)
-    max_aspect_ratio: float  # width / height (maximum)
-    is_multi_line: bool = False
-    is_bharat_only: bool = False
-
-    def __call__(self, plate: IndianLicensePlate, style: "TemplateStyle") -> Widget:
-        return self.func(plate, style)
-
-
-class TemplateStyle(BaseModel):
-    font_path: str
-    font_size: int = 50
-    font_size_small: int = 35
-    font_size_large: int = 60
-    font_size_xlarge: int = 70
-    color: str = "black"
-    padding_h: int = 10
-    padding_v: int = 10
-    gap: int = 5
-    row_gap: int = 5
-    letter_spacing: int = 2
-
-    def text(self, content: str, size: int | None = None) -> Text:
-        return Text(
-            content=content,
-            font_path=self.font_path,
-            font_size=size or self.font_size,
-            color=self.color,
-            letter_spacing=self.letter_spacing,
-        )
-
-    def text_small(self, content: str) -> Text:
-        return self.text(content, self.font_size_small)
-
-    def text_large(self, content: str) -> Text:
-        return self.text(content, self.font_size_large)
-
-    def text_xlarge(self, content: str) -> Text:
-        return self.text(content, self.font_size_xlarge)
-
-    def padding(self, child: Widget) -> Padding:
-        return Padding(
-            left=self.padding_h,
-            right=self.padding_h,
-            top=self.padding_v,
-            bottom=self.padding_v,
-            child=child,
-        )
-
-    def row(self, children: list[Widget], cross_align: CrossAlign = "center") -> Row:
-        return Row(children=children, gap=self.gap, cross_axis_alignment=cross_align)
-
-    def column(
-        self, children: list[Widget], cross_align: CrossAlign = "center"
-    ) -> Column:
-        return Column(
-            children=children, gap=self.row_gap, cross_axis_alignment=cross_align
-        )
-
-
-def _random_cross_align() -> CrossAlign:
-    return random.choice(["start", "center", "end"])
+from .templates_core import (
+    CrossAlign,
+    LogoPosition,
+    Template,
+    TemplateFunc,
+    TemplateStyle,
+    random_cross_align,
+    wrap_with_logo,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -104,7 +39,7 @@ def _large_digits(plate: IndianLicensePlate, style: TemplateStyle) -> Widget:
         Row(
             children=[style.text(prefix), style.text_large(plate.digits)],
             gap=style.gap,
-            cross_axis_alignment=_random_cross_align(),
+            cross_axis_alignment=random_cross_align(),
         )
     )
 
@@ -220,7 +155,7 @@ def _digits_second_line(plate: IndianLicensePlate, style: TemplateStyle) -> Widg
         Column(
             children=[style.text(first_line), digit_style(plate.digits)],
             gap=style.row_gap,
-            cross_axis_alignment=_random_cross_align(),
+            cross_axis_alignment=random_cross_align(),
         )
     )
 
@@ -245,7 +180,7 @@ def _letters_digits_second_line(
         Column(
             children=[style.text(first_line), style.text(second_line)],
             gap=style.row_gap,
-            cross_axis_alignment=_random_cross_align(),
+            cross_axis_alignment=random_cross_align(),
         )
     )
 
@@ -269,7 +204,7 @@ def _equal_lines(plate: IndianLicensePlate, style: TemplateStyle) -> Widget:
         Column(
             children=[style.text(first_half), style.text(second_half)],
             gap=style.row_gap,
-            cross_axis_alignment=_random_cross_align(),
+            cross_axis_alignment=random_cross_align(),
         )
     )
 
@@ -294,7 +229,7 @@ def _triple_lines(plate: IndianLicensePlate, style: TemplateStyle) -> Widget:
                 style.text(plate.digits),
             ],
             gap=style.row_gap,
-            cross_axis_alignment=_random_cross_align(),
+            cross_axis_alignment=random_cross_align(),
         )
     )
 
@@ -385,7 +320,7 @@ def _bharat_two_line(plate: IndianLicensePlate, style: TemplateStyle) -> Widget:
         Column(
             children=[style.text(first), style.text_large(second)],
             gap=style.row_gap,
-            cross_axis_alignment=_random_cross_align(),
+            cross_axis_alignment=random_cross_align(),
         )
     )
 
@@ -462,8 +397,14 @@ def random_template(
     aspect_ratio: float | None = None,
     single_line_only: bool = False,
     multi_line_only: bool = False,
+    logo: LogoAsset | None = None,
 ) -> Widget:
-    """Select and apply a random template based on plate type and aspect ratio"""
+    """Select and apply a random template based on plate type and aspect ratio
+
+    Args:
+        logo: Optional LogoAsset to add. Squarish logos (AR < 2) go left/right,
+              wide logos (AR >= 2) go top/bottom.
+    """
     if aspect_ratio is not None:
         templates = get_templates_for_aspect_ratio(
             aspect_ratio,
@@ -492,13 +433,26 @@ def random_template(
             templates = SINGLE_LINE_TEMPLATES + MULTI_LINE_TEMPLATES
 
     template = random.choice(templates)
-    return template(plate, style)
+    widget = template(plate, style)
+
+    if logo is not None:
+        # Remove existing padding to avoid double padding
+        if isinstance(widget, Padding):
+            inner = widget.child
+        else:
+            inner = widget
+        widget = wrap_with_logo(inner, logo, style)
+
+    return widget
 
 
 __all__ = [
+    # Re-export from templates_core
+    "CrossAlign",
+    "LogoPosition",
     "Template",
-    "TemplateStyle",
     "TemplateFunc",
+    "TemplateStyle",
     # Template instances
     "TEMPLATE_SIMPLE",
     "TEMPLATE_LARGE_DIGITS",

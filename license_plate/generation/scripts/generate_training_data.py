@@ -17,7 +17,7 @@ from license_plate.generation.generator import (
     VehicleImageAsset,
     create_augmentation_pipeline,
     get_contrasting_color_with_alpha,
-    get_templates_for_aspect_ratio,
+    random_template,
     sample_plate_color,
 )
 from license_plate.generation.layout import render_tight_and_scale
@@ -100,20 +100,6 @@ def generate_sample(
 
     plate_ar = vehicle.bbox.w / vehicle.bbox.h if vehicle.bbox.h > 0 else 4.0
 
-    templates = get_templates_for_aspect_ratio(
-        plate_ar,
-        is_bharat=is_bharat,
-        multi_line_only=use_multi_line,
-        single_line_only=not use_multi_line,
-    )
-    if not templates:
-        templates = get_templates_for_aspect_ratio(plate_ar, is_bharat=is_bharat)
-    if not templates:
-        print(f"No template for AR {plate_ar:.2f}")
-        return None
-
-    template = random.choice(templates)
-
     # Fixed font sizes - will be scaled to fit plate
     base_size = random.randint(40, 60)
     size_xlarge = int(base_size * 1.4)
@@ -140,6 +126,11 @@ def generate_sample(
     font_color = get_contrasting_color_with_alpha(plate_bg_color)
     style.color = font_color
 
+    # Optionally add a logo (30% chance)
+    logo = None
+    if random.random() < 0.3:
+        logo = loader.random_logo()
+
     img_w, img_h = img.size
 
     # Margin around plate - sometimes tight, sometimes with more vehicle context
@@ -157,7 +148,14 @@ def generate_sample(
     plate_top = top - crop_top
 
     # Render widget at natural size with base scale, then scale to fit plate
-    widget = template(plate, style)
+    widget = random_template(
+        plate,
+        style,
+        aspect_ratio=plate_ar,
+        multi_line_only=use_multi_line,
+        single_line_only=not use_multi_line,
+        logo=logo,
+    )
     plate_img, char_boxes = render_tight_and_scale(
         widget,
         target_width=plate_w,
