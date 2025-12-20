@@ -47,20 +47,10 @@ class DownloadStats(BaseModel):
 
 # Font collection
 FONTS: list[FontConfig] = [
-    # HSRP-style: clean, bold, sans-serif - resembles Indian license plate fonts (8 fonts)
+    # HSRP-style: clean, bold, sans-serif - resembles Indian license plate fonts (6 fonts)
     FontConfig(
         name="montserrat_bold",
         url="https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Bold.ttf",
-        category="hsrp",
-    ),
-    FontConfig(
-        name="poppins_bold",
-        url="https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf",
-        category="hsrp",
-    ),
-    FontConfig(
-        name="lato_bold",
-        url="https://github.com/google/fonts/raw/main/ofl/lato/Lato-Bold.ttf",
         category="hsrp",
     ),
     # License plate style fonts (monospace/technical fonts work well for HSRP)
@@ -109,20 +99,10 @@ FONTS: list[FontConfig] = [
         url="https://github.com/google/fonts/raw/main/ofl/alfaslabone/AlfaSlabOne-Regular.ttf",
         category="display",
     ),
-    # Italic: challenging angles (3 fonts)
+    # Italic: challenging angles (1 font)
     FontConfig(
         name="montserrat_italic",
         url="https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-BoldItalic.ttf",
-        category="italic",
-    ),
-    FontConfig(
-        name="poppins_italic",
-        url="https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-BoldItalic.ttf",
-        category="italic",
-    ),
-    FontConfig(
-        name="lato_italic",
-        url="https://github.com/google/fonts/raw/main/ofl/lato/Lato-BoldItalic.ttf",
         category="italic",
     ),
     # Condensed: M/H/N ambiguity (1 font)
@@ -131,20 +111,10 @@ FONTS: list[FontConfig] = [
         url="https://github.com/google/fonts/raw/main/ofl/fjallaone/FjallaOne-Regular.ttf",
         category="condensed",
     ),
-    # Challenging: O/0, I/1, B/8 confusion (3 fonts)
+    # Challenging: O/0, I/1, B/8 confusion (1 font)
     FontConfig(
         name="staatliches",
         url="https://github.com/google/fonts/raw/main/ofl/staatliches/Staatliches-Regular.ttf",
-        category="challenging",
-    ),
-    FontConfig(
-        name="antonio_bold",
-        url="https://github.com/google/fonts/raw/main/ofl/antonio/Antonio%5Bwght%5D.ttf",
-        category="challenging",
-    ),
-    FontConfig(
-        name="exo_2_bold",
-        url="https://github.com/google/fonts/raw/main/ofl/exo2/Exo2%5Bwght%5D.ttf",
         category="challenging",
     ),
     # Extreme: Heavily stylized fonts (stencil, pixel, futuristic) - maximum OCR difficulty (4 fonts)

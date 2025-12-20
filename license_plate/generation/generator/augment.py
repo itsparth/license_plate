@@ -60,9 +60,9 @@ def create_augmentation_pipeline(*, output_size: int = 192) -> A.Compose:
                     A.GaussNoise(std_range=(0.02, 0.07), p=1.0),
                     A.MultiplicativeNoise(multiplier=(0.9, 1.1), p=1.0),
                 ],
-                p=0.45,
+                p=0.85,
             ),
-            # Blur effects
+            # Blur effects (always apply some blur for realism)
             A.OneOf(
                 [
                     A.GaussianBlur(blur_limit=(3, 5), p=1.0),
@@ -74,23 +74,22 @@ def create_augmentation_pipeline(*, output_size: int = 192) -> A.Compose:
                     ),
                     A.Defocus(radius=(1, 3), p=1.0),
                 ],
-                p=0.4,
+                p=1.0,
             ),
             # Compression artifacts (JPEG from dashcams/CCTV)
-            A.ImageCompression(quality_range=(55, 95), p=0.35),
+            A.ImageCompression(quality_range=(40, 85), p=0.7),
             # Simulate different capture distances
             A.Downscale(scale_range=(0.5, 0.85), p=0.25),
             # Tight crop around plate (simulates detector output)
             A.BBoxSafeRandomCrop(erosion_rate=0.02, p=0.45),
             # Convert to grayscale (training target)
             A.ToGray(p=1.0),
-            # Geometric transforms (no rotation - done during training)
+            # Geometric transforms (scale and shear only)
             A.Affine(
                 scale=(0.92, 1.08),
                 shear=(-8, 8),
                 p=0.3,
             ),
-            A.Perspective(scale=(0.02, 0.06), p=0.35),
             # Final resize
             A.LongestMaxSize(max_size=output_size),
         ],
