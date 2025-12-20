@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Download fonts for Indian license plate generation."""
 
+import io
+import zipfile
 from pathlib import Path
 from typing import Literal
 
@@ -19,10 +21,15 @@ class FontConfig(BaseModel):
     name: str
     url: str
     category: FontCategory
+    zip_path: str | None = None  # Path inside zip file to extract (for zip downloads)
 
     @property
     def filename(self) -> str:
         return f"{self.name}.ttf"
+
+    @property
+    def is_zip(self) -> bool:
+        return self.zip_path is not None
 
 
 class DownloadStats(BaseModel):
@@ -40,7 +47,7 @@ class DownloadStats(BaseModel):
 
 # Font collection
 FONTS: list[FontConfig] = [
-    # HSRP-style: clean, bold, sans-serif (5 fonts)
+    # HSRP-style: clean, bold, sans-serif - resembles Indian license plate fonts (8 fonts)
     FontConfig(
         name="montserrat_bold",
         url="https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Bold.ttf",
@@ -52,26 +59,35 @@ FONTS: list[FontConfig] = [
         category="hsrp",
     ),
     FontConfig(
-        name="nunito_bold",
-        url="https://github.com/google/fonts/raw/main/ofl/nunito/Nunito%5Bwght%5D.ttf",
-        category="hsrp",
-    ),
-    FontConfig(
         name="lato_bold",
         url="https://github.com/google/fonts/raw/main/ofl/lato/Lato-Bold.ttf",
         category="hsrp",
     ),
+    # License plate style fonts (monospace/technical fonts work well for HSRP)
     FontConfig(
-        name="raleway_bold",
-        url="https://github.com/google/fonts/raw/main/ofl/raleway/Raleway%5Bwght%5D.ttf",
+        name="ibm_plex_mono_bold",
+        url="https://github.com/google/fonts/raw/main/ofl/ibmplexmono/IBMPlexMono-Bold.ttf",
         category="hsrp",
     ),
-    # Display: bold, fancy (4 fonts)
     FontConfig(
-        name="bebas_neue",
-        url="https://github.com/google/fonts/raw/main/ofl/bebasneue/BebasNeue-Regular.ttf",
-        category="display",
+        name="road_numbers",
+        url="https://github.com/google/fonts/raw/main/ofl/b612mono/B612Mono-Bold.ttf",
+        category="hsrp",
     ),
+    # GL-Nummernschild - German license plate font (very similar to Indian HSRP)
+    FontConfig(
+        name="gl_nummernschild_eng",
+        url="https://fontesk.com/download/128024/?tmstv=1702529571",
+        category="hsrp",
+        zip_path="fonts/ttf/GL-Nummernschild-Eng.ttf",
+    ),
+    FontConfig(
+        name="gl_nummernschild_mtl",
+        url="https://fontesk.com/download/128024/?tmstv=1702529571",
+        category="hsrp",
+        zip_path="fonts/ttf/GL-Nummernschild-Mtl.ttf",
+    ),
+    # Display: bold, fancy (3 fonts)
     FontConfig(
         name="anton",
         url="https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf",
@@ -103,36 +119,16 @@ FONTS: list[FontConfig] = [
         url="https://github.com/google/fonts/raw/main/ofl/lato/Lato-BoldItalic.ttf",
         category="italic",
     ),
-    # Condensed: M/H/N ambiguity (4 fonts)
-    FontConfig(
-        name="oswald_bold",
-        url="https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf",
-        category="condensed",
-    ),
-    FontConfig(
-        name="yanone_kaffeesatz",
-        url="https://github.com/google/fonts/raw/main/ofl/yanonekaffeesatz/YanoneKaffeesatz%5Bwght%5D.ttf",
-        category="condensed",
-    ),
-    FontConfig(
-        name="archivo_narrow",
-        url="https://github.com/google/fonts/raw/main/ofl/archivonarrow/ArchivoNarrow%5Bwght%5D.ttf",
-        category="condensed",
-    ),
+    # Condensed: M/H/N ambiguity (1 font)
     FontConfig(
         name="fjalla_one",
         url="https://github.com/google/fonts/raw/main/ofl/fjallaone/FjallaOne-Regular.ttf",
         category="condensed",
     ),
-    # Challenging: O/0, I/1, B/8 confusion (4 fonts)
+    # Challenging: O/0, I/1, B/8 confusion (3 fonts)
     FontConfig(
         name="staatliches",
         url="https://github.com/google/fonts/raw/main/ofl/staatliches/Staatliches-Regular.ttf",
-        category="challenging",
-    ),
-    FontConfig(
-        name="teko_bold",
-        url="https://github.com/google/fonts/raw/main/ofl/teko/Teko%5Bwght%5D.ttf",
         category="challenging",
     ),
     FontConfig(
@@ -145,12 +141,7 @@ FONTS: list[FontConfig] = [
         url="https://github.com/google/fonts/raw/main/ofl/exo2/Exo2%5Bwght%5D.ttf",
         category="challenging",
     ),
-    # Extreme: Heavily stylized fonts (stencil, pixel, futuristic) - maximum OCR difficulty (5 fonts)
-    FontConfig(
-        name="orbitron",
-        url="https://github.com/google/fonts/raw/main/ofl/orbitron/Orbitron%5Bwght%5D.ttf",
-        category="extreme",
-    ),
+    # Extreme: Heavily stylized fonts (stencil, pixel, futuristic) - maximum OCR difficulty (4 fonts)
     FontConfig(
         name="black_ops_one",
         url="https://github.com/google/fonts/raw/main/ofl/blackopsone/BlackOpsOne-Regular.ttf",
@@ -164,11 +155,6 @@ FONTS: list[FontConfig] = [
     FontConfig(
         name="bungee",
         url="https://github.com/google/fonts/raw/main/ofl/bungee/Bungee-Regular.ttf",
-        category="extreme",
-    ),
-    FontConfig(
-        name="press_start_2p",
-        url="https://github.com/google/fonts/raw/main/ofl/pressstart2p/PressStart2P-Regular.ttf",
         category="extreme",
     ),
 ]
@@ -188,7 +174,14 @@ def download_font(font: FontConfig, dest_dir: Path, stats: DownloadStats) -> Non
         with httpx.Client(timeout=30, follow_redirects=True) as client:
             response = client.get(font.url)
             response.raise_for_status()
-            dest_file.write_bytes(response.content)
+
+            if font.is_zip and font.zip_path:
+                # Extract specific file from zip
+                with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+                    with zf.open(font.zip_path) as src:
+                        dest_file.write_bytes(src.read())
+            else:
+                dest_file.write_bytes(response.content)
         print("✓")
         stats.success += 1
     except Exception as e:
