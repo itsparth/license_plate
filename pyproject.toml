@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "albumentations>=2.0.8",
+    "fonttools>=4.60.1",
     "google-genai>=1.45.0",
     "httpx>=0.28.1",
     "numpy>=2.2.6",
