@@ -10,12 +10,14 @@ For license plate text (which shouldn't be flipped), consider:
 """
 
 import argparse
+import os
 from pathlib import Path
 
 from rfdetr.detr import RFDETRNano
 
 DATASET_DIR = Path(__file__).parent.parent.parent.parent / "output" / "training_data"
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output" / "rfdetr_training"
+PRETRAINED_DIR = Path(__file__).parent.parent.parent.parent / "output" / "pretrained"
 
 
 def main():
@@ -76,8 +78,16 @@ def main():
     print(f"Dataset: {args.dataset}")
     print(f"Output: {args.output}")
 
+    # Ensure pretrained weights download to output/pretrained/
+    PRETRAINED_DIR.mkdir(parents=True, exist_ok=True)
+    original_cwd = os.getcwd()
+    os.chdir(PRETRAINED_DIR)
+
     # RFDETRNano: 384x384, smallest model for edge deployment
     model = RFDETRNano()
+
+    # Restore working directory
+    os.chdir(original_cwd)
 
     # Train with built-in augmentations (RandomResize, RandomSizeCrop, Normalize)
     # Note: multi_scale=False to keep consistent 384x384 resolution
