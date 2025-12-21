@@ -15,10 +15,12 @@ from license_plate.generation.generator import (
     PlateGenerator,
     TemplateStyle,
     VehicleImageAsset,
-    create_augmentation_pipeline,
+    create_effects_pipeline,
+    create_geometric_pipeline,
     get_contrasting_color_with_alpha,
     random_template,
     sample_plate_color,
+    tight_crop_around_bboxes,
 )
 from license_plate.generation.layout import render_tight_and_scale
 
@@ -38,6 +40,8 @@ class SampleAnnotation(BaseModel):
 
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output" / "training_data"
+TRAIN_SPLIT = 0.8  # 80% train, 20% valid
+CLASSES = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
 
 def is_multi_line_plate(name: str) -> bool:
@@ -79,7 +83,8 @@ def generate_sample(
     loader: AssetLoader,
     output_dir: Path,
     sample_id: int,
-    augment,
+    geometric_aug,
+    effects_aug,
 ) -> SampleAnnotation | None:
     """Generate a single training sample."""
     is_bharat = random.random() < 0.1
@@ -133,9 +138,9 @@ def generate_sample(
 
     img_w, img_h = img.size
 
-    # Margin around plate - sometimes tight, sometimes with more vehicle context
-    # 10-100% of plate height (larger margins show more vehicle)
-    margin_ratio = random.uniform(0.1, 1.0)
+    # Moderate margin for geometric transform leeway (30%)
+    # Tight crop to 5% buffer happens after augmentation
+    margin_ratio = random.uniform(0.25, 0.35)
     crop_margin = int(plate_h * margin_ratio)
     crop_left = max(0, left - crop_margin)
     crop_top = max(0, top - crop_margin)
@@ -187,10 +192,23 @@ def generate_sample(
     labels = [c.label for c in final_chars]
 
     try:
-        augmented = augment(image=result_np, bboxes=bboxes, labels=labels)
-        result_np = augmented["image"]
-        aug_bboxes = augmented["bboxes"]
-        aug_labels = augmented["labels"]
+        # Step 1: Apply geometric transforms (rotation, perspective, shear)
+        geo_result = geometric_aug(image=result_np, bboxes=bboxes, labels=labels)
+        result_np = geo_result["image"]
+        bboxes = list(geo_result["bboxes"])
+        labels = list(geo_result["labels"])
+
+        # Step 2: Tight crop around bboxes (15% horizontal, 10% vertical buffer)
+        if bboxes:
+            result_np, bboxes, labels = tight_crop_around_bboxes(
+                result_np, bboxes, labels
+            )
+
+        # Step 3: Apply visual effects and resize to 256x256
+        eff_result = effects_aug(image=result_np, bboxes=bboxes, labels=labels)
+        result_np = eff_result["image"]
+        aug_bboxes = eff_result["bboxes"]
+        aug_labels = eff_result["labels"]
     except Exception:
         aug_bboxes = bboxes
         aug_labels = labels
@@ -207,7 +225,7 @@ def generate_sample(
     ]
 
     img_filename = f"{sample_id:06d}.jpg"
-    img_path = output_dir / "images" / img_filename
+    img_path = output_dir / img_filename
     cv2.imwrite(str(img_path), cv2.cvtColor(result_np, cv2.COLOR_RGB2BGR))
 
     return SampleAnnotation(
@@ -223,61 +241,76 @@ def generate_dataset(
     *,
     seed: int | None = None,
 ):
-    """Generate training dataset."""
+    """Generate training dataset in COCO format with train/valid splits."""
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "images").mkdir(exist_ok=True)
+    # Create split directories
+    train_dir = output_dir / "train"
+    valid_dir = output_dir / "valid"
+    train_dir.mkdir(parents=True, exist_ok=True)
+    valid_dir.mkdir(parents=True, exist_ok=True)
 
     loader = AssetLoader()
-    augment = create_augmentation_pipeline()
+    geometric_aug = create_geometric_pipeline()
+    effects_aug = create_effects_pipeline()
 
-    annotations: list[dict] = []
-    success_count = 0
+    # Determine split indices
+    num_train = int(num_samples * TRAIN_SPLIT)
+    indices = list(range(num_samples))
+    random.shuffle(indices)
+    train_indices = set(indices[:num_train])
 
-    print(f"Generating {num_samples} samples...")
+    train_samples: list[SampleAnnotation] = []
+    valid_samples: list[SampleAnnotation] = []
+
+    print(
+        f"Generating {num_samples} samples (train: {num_train}, valid: {num_samples - num_train})..."
+    )
     print(f"Output: {output_dir}")
     print("-" * 50)
 
     for i in range(num_samples):
-        sample = generate_sample(loader, output_dir, i, augment)
+        is_train = i in train_indices
+        split_dir = train_dir if is_train else valid_dir
+        sample = generate_sample(loader, split_dir, i, geometric_aug, effects_aug)
         if sample:
-            annotations.append(sample.model_dump())
-            success_count += 1
+            if is_train:
+                train_samples.append(sample)
+            else:
+                valid_samples.append(sample)
             if (i + 1) % 100 == 0:
-                print(f"  Generated {i + 1}/{num_samples} ({success_count} successful)")
+                print(f"  Generated {i + 1}/{num_samples}")
         else:
             print(f"  Failed sample {i}")
 
-    annotations_path = output_dir / "annotations.json"
-    with open(annotations_path, "w") as f:
-        json.dump(annotations, f, indent=2)
+    # Export COCO format
+    export_coco_format(train_samples, train_dir)
+    export_coco_format(valid_samples, valid_dir)
 
     print("-" * 50)
-    print(f"Generated {success_count}/{num_samples} samples")
-    print(f"Annotations: {annotations_path}")
-
-    export_yolo_format(annotations, output_dir)
+    print(f"Generated {len(train_samples)} train + {len(valid_samples)} valid samples")
+    print(f"Dataset: {output_dir}")
 
 
-def export_yolo_format(annotations: list[dict], output_dir: Path):
-    """Export annotations in YOLO format for training."""
-    labels_dir = output_dir / "labels"
-    labels_dir.mkdir(exist_ok=True)
+def export_coco_format(samples: list[SampleAnnotation], output_dir: Path):
+    """Export annotations in COCO format for RF-DETR training."""
+    class_to_id = {c: i for i, c in enumerate(CLASSES)}
 
-    classes = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-    class_to_id = {c: i for i, c in enumerate(classes)}
+    coco = {
+        "images": [],
+        "annotations": [],
+        "categories": [
+            {"id": i, "name": name, "supercategory": "character"}
+            for i, name in enumerate(CLASSES)
+        ],
+    }
 
-    with open(output_dir / "classes.txt", "w") as f:
-        f.write("\n".join(classes))
+    annotation_id = 0
 
-    for ann in annotations:
-        img_name = ann["image_path"]
-        label_name = Path(img_name).stem + ".txt"
-
-        img_path = output_dir / "images" / img_name
+    for image_id, sample in enumerate(samples):
+        img_path = output_dir / sample.image_path
         if not img_path.exists():
             continue
         img = cv2.imread(str(img_path))
@@ -285,47 +318,76 @@ def export_yolo_format(annotations: list[dict], output_dir: Path):
             continue
         img_h, img_w = img.shape[:2]
 
-        lines = []
-        for char in ann["characters"]:
-            label = char["label"].upper()
+        coco["images"].append(
+            {
+                "id": image_id,
+                "file_name": sample.image_path,
+                "width": img_w,
+                "height": img_h,
+            }
+        )
+
+        for char in sample.characters:
+            label = char.label.upper()
             if label not in class_to_id:
                 continue
 
-            class_id = class_to_id[label]
-            cx = (char["x"] + char["width"] / 2) / img_w
-            cy = (char["y"] + char["height"] / 2) / img_h
-            w = char["width"] / img_w
-            h = char["height"] / img_h
+            coco["annotations"].append(
+                {
+                    "id": annotation_id,
+                    "image_id": image_id,
+                    "category_id": class_to_id[label],
+                    "bbox": [char.x, char.y, char.width, char.height],
+                    "area": char.width * char.height,
+                    "iscrowd": 0,
+                }
+            )
+            annotation_id += 1
 
-            lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
+    with open(output_dir / "_annotations.coco.json", "w") as f:
+        json.dump(coco, f, indent=2)
 
-        with open(labels_dir / label_name, "w") as f:
-            f.write("\n".join(lines))
-
-    print(f"YOLO labels: {labels_dir}")
+    print(
+        f"COCO annotations: {output_dir / '_annotations.coco.json'} ({len(coco['images'])} images, {len(coco['annotations'])} annotations)"
+    )
 
 
 def generate_debug_visualization(output_dir: Path, max_samples: int = 10):
-    """Generate debug images with bounding boxes drawn."""
+    """Generate debug images with bounding boxes drawn from COCO annotations."""
     debug_dir = output_dir / "debug"
     debug_dir.mkdir(exist_ok=True)
 
-    annotations_path = output_dir / "annotations.json"
-    with open(annotations_path) as f:
-        annotations = json.load(f)
+    # Use train split for debug visualization
+    train_dir = output_dir / "train"
+    annotations_path = train_dir / "_annotations.coco.json"
+    if not annotations_path.exists():
+        print("No annotations found for debug visualization")
+        return
 
-    for i, ann in enumerate(annotations[:max_samples]):
-        img_path = output_dir / "images" / ann["image_path"]
+    with open(annotations_path) as f:
+        coco = json.load(f)
+
+    # Build lookup for annotations by image_id
+    img_to_anns: dict[int, list[dict]] = {}
+    for ann in coco["annotations"]:
+        img_id = ann["image_id"]
+        img_to_anns.setdefault(img_id, []).append(ann)
+
+    id_to_name = {cat["id"]: cat["name"] for cat in coco["categories"]}
+
+    for i, img_info in enumerate(coco["images"][:max_samples]):
+        img_path = train_dir / img_info["file_name"]
         img = cv2.imread(str(img_path))
         if img is None:
             continue
 
-        for char in ann["characters"]:
-            x, y, w, h = char["x"], char["y"], char["width"], char["height"]
+        for ann in img_to_anns.get(img_info["id"], []):
+            x, y, w, h = [int(v) for v in ann["bbox"]]
+            label = id_to_name.get(ann["category_id"], "?")
             cv2.rectangle(img, (x, y), (x + w, y + h), (0, 0, 255), 2)
             cv2.putText(
                 img,
-                char["label"],
+                label,
                 (x, y - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,

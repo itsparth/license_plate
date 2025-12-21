@@ -6,7 +6,12 @@ from .asset_loader import (
     VehicleImageAsset,
     VehiclePlateBBox,
 )
-from .augment import create_augmentation_pipeline
+from .augment import (
+    create_augmentation_pipeline,
+    create_effects_pipeline,
+    create_geometric_pipeline,
+    tight_crop_around_bboxes,
+)
 from .color import get_contrasting_color_with_alpha, sample_plate_color
 from .plate_generator import (
     IndianLicensePlate,
@@ -52,6 +57,9 @@ __all__ = [
     "VehiclePlateBBox",
     # Augmentation
     "create_augmentation_pipeline",
+    "create_effects_pipeline",
+    "create_geometric_pipeline",
+    "tight_crop_around_bboxes",
     # Color
     "get_contrasting_color_with_alpha",
     "sample_plate_color",
