@@ -40,7 +40,9 @@ class SampleAnnotation(BaseModel):
 
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output" / "training_data"
-TRAIN_SPLIT = 0.8  # 80% train, 20% valid
+TRAIN_SPLIT = 0.8  # 80% train
+VALID_SPLIT = 0.1  # 10% valid
+# Remaining 10% goes to test
 CLASSES = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
 
@@ -241,7 +243,7 @@ def generate_dataset(
     *,
     seed: int | None = None,
 ):
-    """Generate training dataset in COCO format with train/valid splits."""
+    """Generate training dataset in COCO format with train/valid/test splits."""
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
@@ -249,37 +251,47 @@ def generate_dataset(
     # Create split directories
     train_dir = output_dir / "train"
     valid_dir = output_dir / "valid"
+    test_dir = output_dir / "test"
     train_dir.mkdir(parents=True, exist_ok=True)
     valid_dir.mkdir(parents=True, exist_ok=True)
+    test_dir.mkdir(parents=True, exist_ok=True)
 
     loader = AssetLoader()
     geometric_aug = create_geometric_pipeline()
     effects_aug = create_effects_pipeline()
 
-    # Determine split indices
+    # Determine split indices (80/10/10)
     num_train = int(num_samples * TRAIN_SPLIT)
+    num_valid = int(num_samples * VALID_SPLIT)
     indices = list(range(num_samples))
     random.shuffle(indices)
     train_indices = set(indices[:num_train])
+    valid_indices = set(indices[num_train : num_train + num_valid])
+    # Rest goes to test
 
     train_samples: list[SampleAnnotation] = []
     valid_samples: list[SampleAnnotation] = []
+    test_samples: list[SampleAnnotation] = []
 
     print(
-        f"Generating {num_samples} samples (train: {num_train}, valid: {num_samples - num_train})..."
+        f"Generating {num_samples} samples (train: {num_train}, valid: {num_valid}, test: {num_samples - num_train - num_valid})..."
     )
     print(f"Output: {output_dir}")
     print("-" * 50)
 
     for i in range(num_samples):
-        is_train = i in train_indices
-        split_dir = train_dir if is_train else valid_dir
+        if i in train_indices:
+            split_dir = train_dir
+            samples_list = train_samples
+        elif i in valid_indices:
+            split_dir = valid_dir
+            samples_list = valid_samples
+        else:
+            split_dir = test_dir
+            samples_list = test_samples
         sample = generate_sample(loader, split_dir, i, geometric_aug, effects_aug)
         if sample:
-            if is_train:
-                train_samples.append(sample)
-            else:
-                valid_samples.append(sample)
+            samples_list.append(sample)
             if (i + 1) % 100 == 0:
                 print(f"  Generated {i + 1}/{num_samples}")
         else:
@@ -288,9 +300,12 @@ def generate_dataset(
     # Export COCO format
     export_coco_format(train_samples, train_dir)
     export_coco_format(valid_samples, valid_dir)
+    export_coco_format(test_samples, test_dir)
 
     print("-" * 50)
-    print(f"Generated {len(train_samples)} train + {len(valid_samples)} valid samples")
+    print(
+        f"Generated {len(train_samples)} train + {len(valid_samples)} valid + {len(test_samples)} test samples"
+    )
     print(f"Dataset: {output_dir}")
 
 
@@ -299,6 +314,12 @@ def export_coco_format(samples: list[SampleAnnotation], output_dir: Path):
     class_to_id = {c: i for i, c in enumerate(CLASSES)}
 
     coco = {
+        "info": {
+            "description": "License Plate Character Detection Dataset",
+            "version": "1.0",
+            "year": 2025,
+        },
+        "licenses": [],
         "images": [],
         "annotations": [],
         "categories": [
