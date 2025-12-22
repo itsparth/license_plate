@@ -3,7 +3,9 @@
 
 import argparse
 import json
+import os
 import random
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 
 import cv2
@@ -45,6 +47,24 @@ VALID_SPLIT = 0.1  # 10% valid
 # Remaining 10% goes to test
 CLASSES = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
+# Worker-local state (initialized once per process)
+_worker_loader: AssetLoader | None = None
+_worker_geometric_aug = None
+_worker_effects_aug = None
+
+
+def _init_worker(seed_base: int | None, worker_id: int):
+    """Initialize worker-local resources."""
+    global _worker_loader, _worker_geometric_aug, _worker_effects_aug
+    _worker_loader = AssetLoader()
+    _worker_geometric_aug = create_geometric_pipeline()
+    _worker_effects_aug = create_effects_pipeline()
+    # Seed each worker differently for variety
+    if seed_base is not None:
+        worker_seed = seed_base + worker_id
+        random.seed(worker_seed)
+        np.random.seed(worker_seed)
+
 
 def is_multi_line_plate(name: str) -> bool:
     """Check if the plate template is multi-line based on filename."""
@@ -81,14 +101,25 @@ def select_vehicle_for_template(
     return random.choice(candidates) if candidates else random.choice(vehicles)
 
 
+def _generate_sample_task(args: tuple[int, Path]) -> tuple[int, SampleAnnotation | None]:
+    """Worker task for multiprocessing. Returns (sample_id, annotation)."""
+    sample_id, output_dir = args
+    result = generate_sample(output_dir, sample_id)
+    return sample_id, result
+
+
 def generate_sample(
-    loader: AssetLoader,
     output_dir: Path,
     sample_id: int,
-    geometric_aug,
-    effects_aug,
 ) -> SampleAnnotation | None:
-    """Generate a single training sample."""
+    """Generate a single training sample using worker-local resources."""
+    loader = _worker_loader
+    geometric_aug = _worker_geometric_aug
+    effects_aug = _worker_effects_aug
+
+    if loader is None:
+        raise RuntimeError("Worker not initialized")
+
     is_bharat = random.random() < 0.1
     plate = PlateGenerator.generate(is_bharat_series=is_bharat)
 
@@ -237,6 +268,10 @@ def generate_sample(
         aug_bboxes = bboxes
         aug_labels = labels
 
+    # Validate result image
+    if result_np is None or result_np.size == 0:
+        return None
+
     final_chars = [
         CharacterAnnotation(
             label=label,
@@ -250,7 +285,10 @@ def generate_sample(
 
     img_filename = f"{sample_id:06d}.jpg"
     img_path = output_dir / img_filename
-    cv2.imwrite(str(img_path), cv2.cvtColor(result_np, cv2.COLOR_RGB2BGR))
+    try:
+        cv2.imwrite(str(img_path), cv2.cvtColor(result_np, cv2.COLOR_RGB2BGR))
+    except cv2.error:
+        return None
 
     return SampleAnnotation(
         image_path=img_filename,
@@ -264,6 +302,7 @@ def generate_dataset(
     output_dir: Path,
     *,
     seed: int | None = None,
+    num_workers: int | None = None,
 ):
     """Generate training dataset in COCO format with train/valid/test splits."""
     if seed is not None:
@@ -278,10 +317,6 @@ def generate_dataset(
     valid_dir.mkdir(parents=True, exist_ok=True)
     test_dir.mkdir(parents=True, exist_ok=True)
 
-    loader = AssetLoader()
-    geometric_aug = create_geometric_pipeline()
-    effects_aug = create_effects_pipeline()
-
     # Determine split indices (80/10/10)
     num_train = int(num_samples * TRAIN_SPLIT)
     num_valid = int(num_samples * VALID_SPLIT)
@@ -291,33 +326,57 @@ def generate_dataset(
     valid_indices = set(indices[num_train : num_train + num_valid])
     # Rest goes to test
 
-    train_samples: list[SampleAnnotation] = []
-    valid_samples: list[SampleAnnotation] = []
-    test_samples: list[SampleAnnotation] = []
+    # Build task list: (sample_id, output_dir)
+    tasks: list[tuple[int, Path]] = []
+    for i in range(num_samples):
+        if i in train_indices:
+            tasks.append((i, train_dir))
+        elif i in valid_indices:
+            tasks.append((i, valid_dir))
+        else:
+            tasks.append((i, test_dir))
+
+    # Determine worker count
+    if num_workers is None:
+        num_workers = max(1, cpu_count() - 1)
+    num_workers = max(1, min(num_workers, cpu_count()))
 
     print(
         f"Generating {num_samples} samples (train: {num_train}, valid: {num_valid}, test: {num_samples - num_train - num_valid})..."
     )
     print(f"Output: {output_dir}")
+    print(f"Workers: {num_workers}")
     print("-" * 50)
 
-    for i in range(num_samples):
-        if i in train_indices:
-            split_dir = train_dir
-            samples_list = train_samples
-        elif i in valid_indices:
-            split_dir = valid_dir
-            samples_list = valid_samples
-        else:
-            split_dir = test_dir
-            samples_list = test_samples
-        sample = generate_sample(loader, split_dir, i, geometric_aug, effects_aug)
-        if sample:
-            samples_list.append(sample)
-            if (i + 1) % 100 == 0:
-                print(f"  Generated {i + 1}/{num_samples}")
-        else:
-            print(f"  Failed sample {i}")
+    train_samples: list[SampleAnnotation] = []
+    valid_samples: list[SampleAnnotation] = []
+    test_samples: list[SampleAnnotation] = []
+
+    # Use multiprocessing pool
+    completed = 0
+    failed = 0
+
+    def init_worker_wrapper(seed_base: int | None):
+        """Wrapper to initialize worker with unique seed."""
+        worker_id = os.getpid()
+        _init_worker(seed_base, worker_id)
+
+    with Pool(num_workers, initializer=init_worker_wrapper, initargs=(seed,)) as pool:
+        for sample_id, result in pool.imap_unordered(_generate_sample_task, tasks, chunksize=32):
+            if result:
+                if sample_id in train_indices:
+                    train_samples.append(result)
+                elif sample_id in valid_indices:
+                    valid_samples.append(result)
+                else:
+                    test_samples.append(result)
+                completed += 1
+            else:
+                failed += 1
+
+            total = completed + failed
+            if total % 500 == 0:
+                print(f"  Progress: {total}/{num_samples} ({completed} ok, {failed} failed)")
 
     # Export COCO format
     export_coco_format(train_samples, train_dir)
@@ -474,12 +533,20 @@ def main():
         action="store_true",
         help="Generate debug visualization images with bounding boxes",
     )
+    parser.add_argument(
+        "-w",
+        "--workers",
+        type=int,
+        default=None,
+        help=f"Number of worker processes (default: {max(1, cpu_count() - 1)})",
+    )
     args = parser.parse_args()
 
     generate_dataset(
         num_samples=args.num_samples,
         output_dir=args.output,
         seed=args.seed,
+        num_workers=args.workers,
     )
 
     if args.debug:
