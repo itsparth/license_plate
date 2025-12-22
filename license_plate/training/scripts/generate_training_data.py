@@ -96,7 +96,29 @@ def generate_sample(
     if not fonts:
         print("No fonts available")
         return None
-    font_path = random.choice(fonts)
+
+    # Weight license plate fonts higher (70%) vs decorative fonts (30%)
+    # Plate fonts: HSRP-like clean, bold fonts for realistic plates
+    plate_font_names = {
+        "hsrp.ttf",
+        "license_plate.ttf",
+        "license_plate_closed.ttf",
+        "gl_nummernschild_eng.ttf",
+        "gl_nummernschild_mtl.ttf",
+        "road_numbers.ttf",
+        "montserrat_bold.ttf",
+        "ibm_plex_mono_bold.ttf",
+        "anton.ttf",
+    }
+    plate_fonts = [f for f in fonts if f.split("/")[-1].lower() in plate_font_names]
+    other_fonts = [f for f in fonts if f not in plate_fonts]
+
+    if plate_fonts and other_fonts and random.random() < 0.7:
+        font_path = random.choice(plate_fonts)
+    elif plate_fonts:
+        font_path = random.choice(plate_fonts)
+    else:
+        font_path = random.choice(fonts)
 
     use_multi_line = random.random() < 0.4
 

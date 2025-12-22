@@ -17,12 +17,12 @@ def create_geometric_pipeline() -> A.Compose:
                 fill=0,  # Black fill
                 p=0.5,
             ),
-            # Perspective - CCTV/dashcam viewing angles
+            # Perspective - CCTV/dashcam viewing angles (more aggressive)
             A.Perspective(
-                scale=(0.02, 0.08),
+                scale=(0.02, 0.12),
                 fit_output=True,
                 fill=0,  # Black fill
-                p=0.5,
+                p=0.6,
             ),
             # Affine - shear and slight scale variations
             A.Affine(
@@ -94,24 +94,33 @@ def create_effects_pipeline(*, output_size: int = 256) -> A.Compose:
                 ],
                 p=0.85,
             ),
-            # Blur effects (always apply some blur for realism)
+            # Blur effects (heavier blur for realism)
             A.OneOf(
                 [
-                    A.GaussianBlur(blur_limit=(3, 5), p=1.0),
+                    A.GaussianBlur(blur_limit=(3, 9), p=1.0),
                     A.MotionBlur(
-                        blur_limit=(5, 15),
+                        blur_limit=(5, 21),
                         angle_range=(0, 360),
                         direction_range=(-1.0, 1.0),
                         p=1.0,
                     ),
-                    A.Defocus(radius=(1, 3), p=1.0),
+                    A.Defocus(radius=(2, 5), p=1.0),
+                    A.ZoomBlur(max_factor=1.15, p=1.0),
                 ],
                 p=1.0,
             ),
-            # Compression artifacts (JPEG from dashcams/CCTV)
-            A.ImageCompression(quality_range=(40, 85), p=0.7),
-            # Downscale (simulate distance)
-            A.Downscale(scale_range=(0.5, 0.85), p=0.3),
+            # Plate wear effects (scratches, dirt, fading)
+            A.OneOf(
+                [
+                    A.Spatter(mean=(0.5, 0.6), std=(0.1, 0.2), p=1.0),
+                    A.RandomGravel(gravel_roi=(0, 0, 1, 1), number_of_patches=1, p=1.0),
+                ],
+                p=0.25,
+            ),
+            # Compression artifacts (JPEG from dashcams/CCTV - more aggressive)
+            A.ImageCompression(quality_range=(25, 80), p=0.8),
+            # Downscale (simulate distance - more aggressive)
+            A.Downscale(scale_range=(0.35, 0.85), p=0.5),
             # Convert to grayscale (training target)
             A.ToGray(p=1.0),
             # Resize longest side, then pad to square with black padding
