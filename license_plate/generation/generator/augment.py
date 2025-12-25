@@ -24,6 +24,15 @@ def create_geometric_pipeline() -> A.Compose:
                 fill=0,  # Black fill
                 p=0.6,
             ),
+            # Vertical stretch - common on stamped/pressed plates
+            A.Affine(
+                scale={"x": (0.95, 1.05), "y": (1.1, 1.4)},
+                rotate=0,
+                shear=0,
+                border_mode=0,
+                fill=0,
+                p=0.3,
+            ),
             # Affine - shear and slight scale variations
             A.Affine(
                 scale=(0.9, 1.1),
@@ -42,7 +51,7 @@ def create_geometric_pipeline() -> A.Compose:
     )
 
 
-def create_effects_pipeline(*, output_size: int = 256) -> A.Compose:
+def create_effects_pipeline(*, output_size: int = 384) -> A.Compose:
     """Visual effects applied after tight crop."""
     return A.Compose(
         [

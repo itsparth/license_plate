@@ -42,8 +42,7 @@ def levenshtein_similarity(s1: str, s2: str) -> float:
 
 
 DATASETS = [
-    ("pnmr", "indian_license_plate-sjlpn", 1),  # Original dataset
-    ("yolomdata", "indian-license", 1),  # New multi-plate dataset
+    ("license-plate-detection-khhkb", "indian-license-plate-detection-6tmbr", 1),
 ]
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
 CACHE_DIR = OUTPUT_DIR / "gemini_cache"
@@ -243,7 +242,7 @@ def deduplicate(class_ids, bboxes, confidences, iou_thresh=0.5):
 
 
 def parse_plate(class_ids, bboxes, confidences, conf_thresh=0.3) -> str:
-    """Parse detections into plate string."""
+    """Parse detections into plate string (left-to-right, top-to-bottom)."""
     if len(class_ids) == 0:
         return ""
 
@@ -257,34 +256,30 @@ def parse_plate(class_ids, bboxes, confidences, conf_thresh=0.3) -> str:
     if len(class_ids) == 0:
         return ""
 
-    cx = (bboxes[:, 0] + bboxes[:, 2]) / 2
-    cy = (bboxes[:, 1] + bboxes[:, 3]) / 2
+    # Use bottom of bbox (y2) to determine line membership
+    # This handles stacked plates better than center-y
+    cx = (bboxes[:, 0] + bboxes[:, 2]) / 2  # center x
+    y_bottom = bboxes[:, 3]  # bottom edge
     heights = bboxes[:, 3] - bboxes[:, 1]
     avg_h = heights.mean()
 
-    x_order = np.argsort(cx)
-    cy_sorted = cy[x_order]
+    # Cluster characters into lines based on bottom-y position
+    # Sort by bottom-y first to find line breaks
+    y_order = np.argsort(y_bottom)
+    y_sorted = y_bottom[y_order]
 
-    # Check for multi-line
-    is_multi = False
-    if len(cy_sorted) > 1:
-        y_diffs = np.abs(np.diff(cy_sorted))
-        is_multi = y_diffs.max() > avg_h * 1.2
+    # Find line breaks: gap > 50% of avg height indicates new line
+    lines = [[y_order[0]]]
+    for i in range(1, len(y_order)):
+        if y_sorted[i] - y_sorted[i - 1] > avg_h * 0.5:
+            lines.append([])
+        lines[-1].append(y_order[i])
 
-    if is_multi:
-        split_idx = np.argmax(y_diffs) + 1
-        line1, line2 = x_order[:split_idx], x_order[split_idx:]
-
-        if cy[line1].mean() < cy[line2].mean():
-            top, bot = line1, line2
-        else:
-            top, bot = line2, line1
-
-        top = top[np.argsort(cx[top])]
-        bot = bot[np.argsort(cx[bot])]
-        ordered = list(top) + list(bot)
-    else:
-        ordered = x_order.tolist()
+    # Sort each line left-to-right by center-x
+    ordered = []
+    for line in lines:
+        line_sorted = sorted(line, key=lambda idx: cx[idx])
+        ordered.extend(line_sorted)
 
     chars = [CLASSES[class_ids[i]] for i in ordered]
     text = "".join(chars)
