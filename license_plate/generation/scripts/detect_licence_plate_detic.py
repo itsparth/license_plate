@@ -271,6 +271,200 @@ def detect_all_lvis(
     return cast(sv.Detections, detections[mask])
 
 
+def detect_license_plates_batch(
+    image_paths: list[str],
+    confidence_threshold: float = 0.3,
+    batch_size: int = 2,
+) -> list[sv.Detections]:
+    """Fast batch detection of license plates. Optimized for bulk processing.
+
+    ~10 FPS on RTX 4000 Ada. 10K images in ~16-17 minutes.
+
+    Args:
+        image_paths: List of paths to image files
+        confidence_threshold: Minimum confidence threshold (default: 0.3)
+        batch_size: Batch size for inference (default: 2, optimal for most GPUs)
+
+    Returns:
+        List of sv.Detections, one per input image (bbox only, no masks)
+    """
+    if not hasattr(detect, "predictor"):
+        detect.predictor, detect.metadata = load_detic_model()
+
+    predictor = detect.predictor
+    metadata = detect.metadata
+    model = predictor.model
+    model.eval()
+
+    # Find license plate class IDs
+    class_names = metadata.thing_classes
+    license_plate_ids = [
+        i
+        for i, name in enumerate(class_names)
+        if "license" in name.lower() and "plate" in name.lower()
+    ]
+
+    all_results: list[sv.Detections] = []
+
+    with torch.no_grad():
+        for batch_start in range(0, len(image_paths), batch_size):
+            batch_end = min(batch_start + batch_size, len(image_paths))
+            batch_paths = image_paths[batch_start:batch_end]
+
+            # Prepare batch inputs
+            inputs = []
+            for img_path in batch_paths:
+                img = cv2.imread(img_path)
+                if img is None:
+                    inputs.append(None)
+                    continue
+                height, width = img.shape[:2]
+                img_tensor = predictor.aug.get_transform(img).apply_image(img)
+                img_tensor = torch.as_tensor(
+                    img_tensor.astype("float32").transpose(2, 0, 1)
+                )
+                inputs.append({"image": img_tensor, "height": height, "width": width})
+
+            # Filter out failed loads
+            valid_indices = [i for i, inp in enumerate(inputs) if inp is not None]
+            valid_inputs = [inputs[i] for i in valid_indices]
+
+            if not valid_inputs:
+                all_results.extend([sv.Detections.empty()] * len(batch_paths))
+                continue
+
+            # Run batch inference
+            outputs = model(valid_inputs)
+
+            # Process results
+            result_idx = 0
+            for i in range(len(batch_paths)):
+                if i not in valid_indices:
+                    all_results.append(sv.Detections.empty())
+                    continue
+
+                instances = outputs[result_idx]["instances"]
+                boxes = instances.pred_boxes.tensor.cpu().numpy()
+                scores = instances.scores.cpu().numpy()
+                classes = instances.pred_classes.cpu().numpy()
+
+                # Filter for license plates
+                mask = np.isin(classes, license_plate_ids) & (
+                    scores >= confidence_threshold
+                )
+
+                if not mask.any():
+                    all_results.append(sv.Detections.empty())
+                else:
+                    all_results.append(
+                        sv.Detections(
+                            xyxy=boxes[mask],
+                            confidence=scores[mask],
+                            class_id=classes[mask],
+                        )
+                    )
+                result_idx += 1
+
+    return all_results
+
+
+def detect_license_plates_fast(
+    image_paths: list[str],
+    confidence_threshold: float = 0.3,
+    batch_size: int = 2,
+    show_progress: bool = True,
+) -> list[np.ndarray]:
+    """Fastest license plate detection - returns only bboxes as numpy arrays.
+
+    ~10 FPS on RTX 4000 Ada. 10K images in ~16-17 minutes.
+
+    Args:
+        image_paths: List of paths to image files
+        confidence_threshold: Minimum confidence threshold (default: 0.3)
+        batch_size: Batch size for inference (default: 2)
+        show_progress: Print progress every 100 images
+
+    Returns:
+        List of numpy arrays with shape (N, 4) for xyxy bboxes per image
+    """
+    if not hasattr(detect, "predictor"):
+        detect.predictor, detect.metadata = load_detic_model()
+
+    predictor = detect.predictor
+    metadata = detect.metadata
+    model = predictor.model
+    model.eval()
+
+    # Find license plate class IDs
+    class_names = metadata.thing_classes
+    license_plate_ids = set(
+        i
+        for i, name in enumerate(class_names)
+        if "license" in name.lower() and "plate" in name.lower()
+    )
+
+    all_boxes: list[np.ndarray] = []
+    total = len(image_paths)
+
+    with torch.no_grad():
+        for batch_start in range(0, total, batch_size):
+            batch_end = min(batch_start + batch_size, total)
+            batch_paths = image_paths[batch_start:batch_end]
+
+            if show_progress and batch_start % 100 == 0:
+                print(f"Processing {batch_start}/{total}...")
+
+            # Prepare batch
+            inputs = []
+            valid_mask = []
+            for img_path in batch_paths:
+                img = cv2.imread(img_path)
+                if img is None:
+                    valid_mask.append(False)
+                    continue
+                valid_mask.append(True)
+                h, w = img.shape[:2]
+                t = predictor.aug.get_transform(img).apply_image(img)
+                inputs.append({
+                    "image": torch.as_tensor(t.astype("float32").transpose(2, 0, 1)),
+                    "height": h,
+                    "width": w,
+                })
+
+            if not inputs:
+                all_boxes.extend([np.zeros((0, 4))] * len(batch_paths))
+                continue
+
+            # Inference
+            outputs = model(inputs)
+
+            # Extract results
+            out_idx = 0
+            for is_valid in valid_mask:
+                if not is_valid:
+                    all_boxes.append(np.zeros((0, 4)))
+                    continue
+
+                inst = outputs[out_idx]["instances"]
+                boxes = inst.pred_boxes.tensor.cpu().numpy()
+                scores = inst.scores.cpu().numpy()
+                classes = inst.pred_classes.cpu().numpy()
+
+                if len(classes) == 0:
+                    all_boxes.append(np.zeros((0, 4)))
+                else:
+                    class_mask = np.array([c in license_plate_ids for c in classes], dtype=bool)
+                    score_mask = scores >= confidence_threshold
+                    mask = class_mask & score_mask
+                    all_boxes.append(boxes[mask] if mask.any() else np.zeros((0, 4)))
+                out_idx += 1
+
+    if show_progress:
+        print(f"Done. Processed {total} images.")
+
+    return all_boxes
+
+
 if __name__ == "__main__":
     # Input and output directories
     vehicles_dir = Path(__file__).parent.parent / "assets/vehicles"

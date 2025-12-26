@@ -12,3 +12,4 @@ wheels/
 # Large files and outputs
 *.pth
 output/
+assets/
