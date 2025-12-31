@@ -13,3 +13,4 @@ wheels/
 *.pth
 output/
 assets/
+*.pt

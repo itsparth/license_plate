@@ -13,11 +13,13 @@ license_plate/
 │   └── scripts/         # Font download, preview generation
 ├── training/
 │   ├── data/            # Dataset preparation scripts
-│   └── rfdetr/          # RF-DETR training pipeline
-│       ├── train_char.py    # Character detection training
-│       ├── train_plate.py   # Plate detection training
-│       ├── export_onnx.py   # ONNX export for DeepStream
-│       └── benchmark.py     # Validate on real datasets
+│   ├── rfdetr/          # RF-DETR training pipeline
+│   │   ├── train_char.py    # Character detection training
+│   │   ├── train_plate.py   # Plate detection training
+│   │   ├── export_onnx.py   # ONNX export for DeepStream
+│   │   └── benchmark.py     # Validate on real datasets
+│   └── yolo11/          # YOLO11 training pipeline
+│       └── train_plate.py   # Plate detection training
 └── inference/           # Production inference package
 ```
 
@@ -68,6 +70,8 @@ output/training_data/
 
 ## Model Training
 
+### RF-DETR Nano
+
 Train RF-DETR Nano (384x384 input, optimized for edge deployment):
 
 ```bash
@@ -81,6 +85,40 @@ uv run python -m license_plate.training.rfdetr.train_char \
 **Output:**
 - `checkpoint_best_ema.pth` - Best model weights
 - Training logs with mAP metrics
+
+### YOLO11
+
+Train YOLO11 for license plate detection with various model sizes:
+
+```bash
+# Train YOLO11 Nano (fastest)
+uv run python -m license_plate.training.yolo11.train_plate \
+    -d output/lp_detection_combined \
+    -o output/yolo11_training \
+    -m n \
+    -e 100 \
+    -b 16
+
+# Train YOLO11 Small (better accuracy)
+uv run python -m license_plate.training.yolo11.train_plate -m s -e 100
+
+# Train YOLO11 Medium (best accuracy/speed tradeoff)
+uv run python -m license_plate.training.yolo11.train_plate -m m -e 100
+```
+
+**Model sizes:**
+| Size | Model | Params | Speed |
+|------|-------|--------|-------|
+| n | yolo11n.pt | ~2.6M | Fastest |
+| s | yolo11s.pt | ~9.4M | Fast |
+| m | yolo11m.pt | ~20.1M | Balanced |
+| l | yolo11l.pt | ~25.3M | Accurate |
+| x | yolo11x.pt | ~56.9M | Most Accurate |
+
+**Output:**
+- `weights/best.pt` - Best model weights
+- `weights/last.pt` - Latest checkpoint (for resume)
+- Training plots and metrics
 
 ## Benchmark
 
