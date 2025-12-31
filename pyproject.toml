@@ -22,3 +22,8 @@ dependencies = [
     "tensorrt-cu12>=10.13.3.9",
     "torch>=2.9.0",
 ]
+
+[dependency-groups]
+dev = [
+    "boto3>=1.42.17",
+]

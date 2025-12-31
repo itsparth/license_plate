@@ -12,10 +12,12 @@ license_plate/
 │   ├── layout/          # Widget-tree layout system
 │   └── scripts/         # Font download, preview generation
 ├── training/
-│   └── scripts/
-│       ├── generate_training_data.py  # Generate synthetic dataset
-│       ├── train_rfdetr.py            # Train RF-DETR model
-│       └── benchmark.py               # Validate on real datasets
+│   ├── data/            # Dataset preparation scripts
+│   └── rfdetr/          # RF-DETR training pipeline
+│       ├── train_char.py    # Character detection training
+│       ├── train_plate.py   # Plate detection training
+│       ├── export_onnx.py   # ONNX export for DeepStream
+│       └── benchmark.py     # Validate on real datasets
 └── inference/           # Production inference package
 ```
 
@@ -26,13 +28,13 @@ license_plate/
 uv sync
 
 # Generate synthetic training data (12,000 samples)
-uv run python -m license_plate.training.scripts.generate_training_data -n 12000
+uv run python -m license_plate.training.data.generate_training_data -n 12000
 
 # Train RF-DETR Nano model
-uv run python -m license_plate.training.scripts.train_rfdetr -e 30
+uv run python -m license_plate.training.rfdetr.train_char -e 30
 
 # Benchmark on real datasets
-GEMINI_API_KEY=your_key uv run python license_plate/training/scripts/benchmark.py
+GEMINI_API_KEY=your_key uv run python -m license_plate.training.rfdetr.benchmark
 ```
 
 ## Training Data Generation
@@ -40,7 +42,7 @@ GEMINI_API_KEY=your_key uv run python license_plate/training/scripts/benchmark.p
 Generate synthetic license plates with character-level bounding boxes:
 
 ```bash
-uv run python -m license_plate.training.scripts.generate_training_data \
+uv run python -m license_plate.training.data.generate_training_data \
     -n 12000 \
     -o output/training_data \
     --seed 42
@@ -69,7 +71,7 @@ output/training_data/
 Train RF-DETR Nano (384x384 input, optimized for edge deployment):
 
 ```bash
-uv run python -m license_plate.training.scripts.train_rfdetr \
+uv run python -m license_plate.training.rfdetr.train_char \
     -d output/training_data \
     -o output/rfdetr_training \
     -e 30 \
@@ -85,7 +87,7 @@ uv run python -m license_plate.training.scripts.train_rfdetr \
 Validate model accuracy on real-world datasets from Roboflow:
 
 ```bash
-GEMINI_API_KEY=your_api_key uv run python license_plate/training/scripts/benchmark.py
+GEMINI_API_KEY=your_api_key uv run python -m license_plate.training.rfdetr.benchmark
 ```
 
 **What it does:**

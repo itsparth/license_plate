@@ -44,7 +44,7 @@ def levenshtein_similarity(s1: str, s2: str) -> float:
 DATASETS = [
     ("license-plate-detection-khhkb", "indian-license-plate-detection-6tmbr", 1),
 ]
-OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
+OUTPUT_DIR = Path(__file__).parent.parent.parent.parent.parent / "output"
 CACHE_DIR = OUTPUT_DIR / "gemini_cache"
 MODEL_PATH = OUTPUT_DIR / "rfdetr_training" / "checkpoint_best_ema.pth"
 CLASSES = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")

@@ -7,7 +7,7 @@ from typing import Literal
 import numpy as np
 import tensorrt as trt  # type: ignore[import-untyped]
 
-OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
+OUTPUT_DIR = Path(__file__).parent.parent.parent.parent.parent / "output"
 ONNX_DIR = OUTPUT_DIR / "exported_models"
 TRT_DIR = OUTPUT_DIR / "tensorrt_export"
 

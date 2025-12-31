@@ -17,7 +17,7 @@ from PIL import Image
 
 from rfdetr.detr import RFDETRNano
 
-OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
+OUTPUT_DIR = Path(__file__).parent.parent.parent.parent.parent / "output"
 
 # Model paths
 LP_DETECTION_MODEL = OUTPUT_DIR / "lp_detection_training" / "checkpoint_best_ema.pth"
