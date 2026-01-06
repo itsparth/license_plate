@@ -120,6 +120,132 @@ uv run python -m license_plate.training.yolo11.train_plate -m m -e 100
 - `weights/last.pt` - Latest checkpoint (for resume)
 - Training plots and metrics
 
+### Character Detection (Single-class)
+
+Train YOLO11 for character localization (bounding boxes only, no classification):
+
+```bash
+uv run python -m license_plate.training.yolo11.train_char_detection \
+    -d output/training_data \
+    -m n \
+    -e 100 \
+    --patience 20
+```
+
+## Model Packaging & Deployment
+
+### Export to ONNX and Create Packages
+
+Package trained models for Savant framework deployment:
+
+```bash
+uv run python license_plate/training/yolo11/package_models.py
+```
+
+This creates Savant-compatible zip packages in `output/model_packages/`:
+- `lp_detection.zip` - License plate detection (640x640 input)
+- `char_detection.zip` - Character detection (256x256 input)
+
+Each package contains just the ONNX model file (standard ultralytics export format).
+
+**ONNX Format (Savant-compatible):**
+- Input: `images [batch, 3, height, width]`
+- Output: `output0 [batch, num_classes+4, anchors]`
+
+### Upload to SeaweedFS
+
+Upload packages to filer.kryptonait.com:
+
+```bash
+cd output/model_packages
+
+# Upload LP detection
+curl -X POST "https://filer.kryptonait.com/models/lp_detection/" -F "file=@lp_detection.zip"
+curl -X POST "https://filer.kryptonait.com/models/lp_detection/" -F "file=@lp_detection.md5"
+
+# Upload Char detection
+curl -X POST "https://filer.kryptonait.com/models/char_detection/" -F "file=@char_detection.zip"
+curl -X POST "https://filer.kryptonait.com/models/char_detection/" -F "file=@char_detection.md5"
+```
+
+**Verify uploads:**
+```bash
+curl -s "https://filer.kryptonait.com/models/lp_detection/lp_detection.md5"
+curl -s "https://filer.kryptonait.com/models/char_detection/char_detection.md5"
+```
+
+**Delete old models (if needed):**
+```bash
+# List all models
+curl -s "https://filer.kryptonait.com/models/?pretty=y" | grep -oP 'href="/models/[^/]+' | sed 's/href="\/models\///'
+
+# Delete a model folder
+curl -X DELETE "https://filer.kryptonait.com/models/<folder_name>/?recursive=true"
+```
+
+### Savant Pipeline Configuration
+
+Use the models in a Savant pipeline:
+
+```yaml
+elements:
+  - element: nvinfer@detector
+    name: lp_detector
+    model:
+      remote:
+        url: https://filer.kryptonait.com/models/lp_detection/lp_detection.zip
+        checksum_url: https://filer.kryptonait.com/models/lp_detection/lp_detection.md5
+      format: onnx
+      model_file: lp_detection.onnx
+      batch_size: 1
+      input:
+        shape: [3, 640, 640]
+        scale_factor: 0.0039215697906911373
+        maintain_aspect_ratio: true
+        symmetric_padding: true
+      output:
+        layer_names: [output0]
+        num_detected_classes: 1
+        converter:
+          module: savant.converter.yolo
+          class_name: TensorToBBoxConverter
+          kwargs:
+            confidence_threshold: 0.25
+            nms_iou_threshold: 0.45
+            top_k: 300
+        objects:
+          - class_id: 0
+            label: license_plate
+
+  - element: nvinfer@detector
+    name: char_detector
+    model:
+      remote:
+        url: https://filer.kryptonait.com/models/char_detection/char_detection.zip
+        checksum_url: https://filer.kryptonait.com/models/char_detection/char_detection.md5
+      format: onnx
+      model_file: char_detection.onnx
+      batch_size: 1
+      input:
+        shape: [3, 256, 256]
+        scale_factor: 0.0039215697906911373
+        maintain_aspect_ratio: true
+        symmetric_padding: true
+      output:
+        layer_names: [output0]
+        num_detected_classes: 1
+        converter:
+          module: savant.converter.yolo
+          class_name: TensorToBBoxConverter
+          kwargs:
+            confidence_threshold: 0.25
+            nms_iou_threshold: 0.45
+            top_k: 300
+        objects:
+          - class_id: 0
+            label: char
+```
+
 ## Benchmark
 
 Validate model accuracy on real-world datasets from Roboflow:

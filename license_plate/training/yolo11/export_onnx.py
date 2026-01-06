@@ -18,12 +18,20 @@ OUTPUT_DIR = Path(__file__).parent.parent.parent.parent.parent / "output"
 EXPORT_DIR = OUTPUT_DIR / "yolo11_export"
 PACKAGES_DIR = OUTPUT_DIR / "model_packages"
 
+# Character class labels (36 classes: A-Z, 0-9)
+CHAR_LABELS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
 # Model configurations
 MODELS = {
     "lp_detection": {
         "checkpoint": OUTPUT_DIR / "yolo11_training" / "yolo11n_lp" / "weights" / "best.pt",
         "labels": ["license_plate"],
         "imgsz": 640,
+    },
+    "char_detection": {
+        "checkpoint": OUTPUT_DIR / "yolo11_char_training" / "yolo11n_char" / "weights" / "best.pt",
+        "labels": CHAR_LABELS,
+        "imgsz": 256,
     },
 }
 

@@ -46,7 +46,8 @@ DATASETS = [
 ]
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent.parent / "output"
 CACHE_DIR = OUTPUT_DIR / "gemini_cache"
-MODEL_PATH = OUTPUT_DIR / "rfdetr_training" / "checkpoint_best_ema.pth"
+MODEL_PATH = Path(__file__).parent.parent.parent.parent / "output" / "rfdetr_medium_training" / "checkpoint_best_ema.pth"
+MODEL_TYPE = "medium"  # "nano" or "medium"
 CLASSES = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 MAX_PARALLEL = 20
 
@@ -292,24 +293,35 @@ def parse_plate(class_ids, bboxes, confidences, conf_thresh=0.3) -> str:
 
 
 def preprocess(img: Image.Image) -> Image.Image:
-    """Convert to grayscale and resize to 256x256 with padding."""
+    """Preprocess image for RF-DETR inference (matches training augmentation)."""
+    # RF-DETR Medium was trained at 384x384 with grayscale
+    TARGET_SIZE = 384
+    
+    # Convert to grayscale as 3-channel RGB (matches A.ToGray in training)
     gray = img.convert("L").convert("RGB")
+    
+    # Letterbox resize to training resolution with aspect ratio preservation
     w, h = gray.size
-    scale = 256 / max(w, h)
+    scale = TARGET_SIZE / max(w, h)
     nw, nh = int(w * scale), int(h * scale)
     resized = gray.resize((nw, nh), Image.Resampling.LANCZOS)
 
-    padded = Image.new("RGB", (256, 256), (0, 0, 0))
-    padded.paste(resized, ((256 - nw) // 2, (256 - nh) // 2))
+    # Pad to square with black (same as training)
+    padded = Image.new("RGB", (TARGET_SIZE, TARGET_SIZE), (0, 0, 0))
+    padded.paste(resized, ((TARGET_SIZE - nw) // 2, (TARGET_SIZE - nh) // 2))
     return padded
 
 
 def run_model(samples: list[Sample], ocr_results: dict[str, str]) -> list[dict]:
     """Run model inference on all samples."""
-    from rfdetr.detr import RFDETRNano
-
-    print(f"\nLoading model from {MODEL_PATH}")
-    model = RFDETRNano(pretrain_weights=str(MODEL_PATH))
+    if MODEL_TYPE == "medium":
+        from rfdetr.detr import RFDETRMedium
+        print(f"\nLoading RF-DETR Medium from {MODEL_PATH}")
+        model = RFDETRMedium(pretrain_weights=str(MODEL_PATH))
+    else:
+        from rfdetr.detr import RFDETRNano
+        print(f"\nLoading RF-DETR Nano from {MODEL_PATH}")
+        model = RFDETRNano(pretrain_weights=str(MODEL_PATH))
 
     results = []
     for s in samples:

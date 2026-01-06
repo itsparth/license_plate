@@ -51,23 +51,30 @@ def create_geometric_pipeline() -> A.Compose:
     )
 
 
-def create_effects_pipeline(*, output_size: int = 384) -> A.Compose:
-    """Visual effects applied after tight crop."""
-    return A.Compose(
-        [
-            # Weather and environmental effects
-            A.OneOf(
-                [
-                    A.RandomShadow(
-                        shadow_roi=(0, 0, 1, 1),
-                        num_shadows_limit=(1, 2),
-                        shadow_dimension=5,
-                        p=1.0,
-                    ),
-                    A.RandomFog(fog_coef_range=(0.05, 0.2), alpha_coef=0.1, p=1.0),
-                    A.RandomSunFlare(src_radius=40, p=1.0),
-                ],
-                p=0.3,
+def create_effects_pipeline(
+    *, output_size: int = 384, small_plate_simulation: bool = True
+) -> A.Compose:
+    """Visual effects applied after tight crop.
+    
+    Args:
+        output_size: Final output image size (square)
+        small_plate_simulation: If True, adds aggressive downscaling to simulate
+            small plates at various distances (20% of output_size to full size)
+    """
+    transforms = [
+        # Weather and environmental effects
+        A.OneOf(
+            [
+                A.RandomShadow(
+                    shadow_roi=(0, 0, 1, 1),
+                    num_shadows_limit=(1, 2),
+                    shadow_dimension=5,
+                    p=1.0,
+                ),
+                A.RandomFog(fog_coef_range=(0.05, 0.2), alpha_coef=0.1, p=1.0),
+                A.RandomSunFlare(src_radius=40, p=1.0),
+            ],
+            p=0.3,
             ),
             # Color augmentations (simulate different lighting)
             A.OneOf(
@@ -132,20 +139,41 @@ def create_effects_pipeline(*, output_size: int = 384) -> A.Compose:
             A.Downscale(scale_range=(0.35, 0.85), p=0.5),
             # Convert to grayscale (training target)
             A.ToGray(p=1.0),
-            # Resize longest side, then pad to square with black padding
+        ]
+
+    # Small plate simulation: resize to random fraction of output_size (40-100%)
+    # This teaches the model to detect characters in plates at various scales
+    if small_plate_simulation:
+        transforms.extend([
+            A.RandomScale(scale_limit=(-0.6, 0.0), p=0.6),  # Scale down 0-60%
             A.LongestMaxSize(max_size=output_size),
             A.PadIfNeeded(
                 min_height=output_size,
                 min_width=output_size,
-                border_mode=0,  # cv2.BORDER_CONSTANT
-                fill=0,  # Black padding
-                position="center",  # Symmetric padding
+                border_mode=0,
+                fill=0,
+                position="random",  # Random position in padded area
             ),
-        ],
+        ])
+    else:
+        # Standard resize to output_size
+        transforms.extend([
+            A.LongestMaxSize(max_size=output_size),
+            A.PadIfNeeded(
+                min_height=output_size,
+                min_width=output_size,
+                border_mode=0,
+                fill=0,
+                position="center",
+            ),
+        ])
+
+    return A.Compose(
+        transforms,
         bbox_params=A.BboxParams(
-            format="coco",  # [x, y, width, height]
+            format="coco",
             label_fields=["labels"],
-            min_visibility=0.7,
+            min_visibility=0.5,  # Lower threshold for small plates
         ),
     )
 

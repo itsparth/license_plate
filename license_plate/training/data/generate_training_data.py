@@ -51,14 +51,27 @@ CLASSES = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 _worker_loader: AssetLoader | None = None
 _worker_geometric_aug = None
 _worker_effects_aug = None
+_worker_output_size: int = 384
+_worker_small_plate_sim: bool = True
 
 
-def _init_worker(seed_base: int | None, worker_id: int):
+def _init_worker(
+    seed_base: int | None,
+    worker_id: int,
+    output_size: int = 384,
+    small_plate_simulation: bool = True,
+):
     """Initialize worker-local resources."""
     global _worker_loader, _worker_geometric_aug, _worker_effects_aug
+    global _worker_output_size, _worker_small_plate_sim
     _worker_loader = AssetLoader()
     _worker_geometric_aug = create_geometric_pipeline()
-    _worker_effects_aug = create_effects_pipeline()
+    _worker_output_size = output_size
+    _worker_small_plate_sim = small_plate_simulation
+    _worker_effects_aug = create_effects_pipeline(
+        output_size=output_size,
+        small_plate_simulation=small_plate_simulation,
+    )
     # Seed each worker differently for variety
     if seed_base is not None:
         worker_seed = seed_base + worker_id
@@ -303,8 +316,19 @@ def generate_dataset(
     *,
     seed: int | None = None,
     num_workers: int | None = None,
+    output_size: int = 384,
+    small_plate_simulation: bool = True,
 ):
-    """Generate training dataset in COCO format with train/valid/test splits."""
+    """Generate training dataset in COCO format with train/valid/test splits.
+    
+    Args:
+        num_samples: Number of samples to generate
+        output_dir: Output directory for generated data
+        seed: Random seed for reproducibility
+        num_workers: Number of worker processes
+        output_size: Output image size (square, default 384 for RF-DETR)
+        small_plate_simulation: If True, includes random scaling to simulate small plates
+    """
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
@@ -345,6 +369,8 @@ def generate_dataset(
         f"Generating {num_samples} samples (train: {num_train}, valid: {num_valid}, test: {num_samples - num_train - num_valid})..."
     )
     print(f"Output: {output_dir}")
+    print(f"Output size: {output_size}x{output_size}")
+    print(f"Small plate simulation: {small_plate_simulation}")
     print(f"Workers: {num_workers}")
     print("-" * 50)
 
@@ -356,12 +382,20 @@ def generate_dataset(
     completed = 0
     failed = 0
 
-    def init_worker_wrapper(seed_base: int | None):
-        """Wrapper to initialize worker with unique seed."""
+    def init_worker_wrapper(
+        seed_base: int | None,
+        img_size: int,
+        small_sim: bool,
+    ):
+        """Wrapper to initialize worker with unique seed and settings."""
         worker_id = os.getpid()
-        _init_worker(seed_base, worker_id)
+        _init_worker(seed_base, worker_id, img_size, small_sim)
 
-    with Pool(num_workers, initializer=init_worker_wrapper, initargs=(seed,)) as pool:
+    with Pool(
+        num_workers,
+        initializer=init_worker_wrapper,
+        initargs=(seed, output_size, small_plate_simulation),
+    ) as pool:
         for sample_id, result in pool.imap_unordered(_generate_sample_task, tasks, chunksize=32):
             if result:
                 if sample_id in train_indices:
@@ -540,6 +574,17 @@ def main():
         default=None,
         help=f"Number of worker processes (default: {max(1, cpu_count() - 1)})",
     )
+    parser.add_argument(
+        "--size",
+        type=int,
+        default=384,
+        help="Output image size (square, default: 384 for RF-DETR)",
+    )
+    parser.add_argument(
+        "--no-small-plate-sim",
+        action="store_true",
+        help="Disable small plate simulation (random scaling)",
+    )
     args = parser.parse_args()
 
     generate_dataset(
@@ -547,6 +592,8 @@ def main():
         output_dir=args.output,
         seed=args.seed,
         num_workers=args.workers,
+        output_size=args.size,
+        small_plate_simulation=not args.no_small_plate_sim,
     )
 
     if args.debug:
